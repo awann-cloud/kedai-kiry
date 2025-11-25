@@ -1,0 +1,37 @@
+/* For Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+}
+
+/* Poppins and Inter Font Family Support */
+/* This makes the inline font-family declarations work properly */
+body {
+  font-family: 'Poppins', sans-serif;
+}
+
+/* Support for all Poppins font weight variations */
+.font-\[\'Poppins\:Regular\'\,sans-serif\],
+[class*="font-['Poppins:Regular"]  {
+  font-family: 'Poppins', sans-serif !important;
+  font-weight: 400 !important;
+}
+
+.font-\[\'Poppins\:Bold\'\,sans-serif\],
+[class*="font-['Poppins:Bold"] {
+  font-family: 'Poppins', sans-serif !important;
+  font-weight: 700 !important;
+}
+
+/* Support for Inter font (used in clock displays) */
+.font-\[\'Inter\:Bold\'\,sans-serif\],
+[class*="font-['Inter:Bold"] {
+  font-family: 'Inter', sans-serif !important;
+  font-weight: 700 !important;
+}
+
+.font-\[\'Inter\:Regular\'\,sans-serif\],
+[class*="font-['Inter:Regular"] {
+  font-family: 'Inter', sans-serif !important;
+  font-weight: 400 !important;
+}
