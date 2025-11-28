@@ -750,7 +750,7 @@ export default function StaffDetailView({
                       <div key={day} className="bg-[#541168] rounded-lg p-3">
                         <div className="text-white text-sm font-semibold mb-2">{day.slice(0, 3)}</div>
                         <div className="text-white/70 text-xs">
-                          {schedule[day.toLowerCase() as keyof WeeklySchedule]?.isWorking ? (
+                          {schedule[day.toLowerCase() as keyof WeeklySchedule]?.isActive ? (
                             <>
                               <div className="text-green-400 mb-1">● Working</div>
                               <div>
