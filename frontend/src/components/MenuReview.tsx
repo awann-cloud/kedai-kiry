@@ -54,8 +54,9 @@ export default function MenuReview() {
       endDate.setHours(23, 59, 59, 999);
     } else if (period === 'today') {
       // Today only
-      startDate = today;
-      endDate = now;
+       startDate = today;
+       endDate = new Date(today);
+       endDate.setDate(today.getDate() + 1); 
     } else if (period === 'week') {
       const day = now.getDay();
       startDate = new Date(today);

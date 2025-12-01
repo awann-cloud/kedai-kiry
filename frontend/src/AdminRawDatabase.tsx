@@ -114,8 +114,9 @@ export default function AdminRawDatabase() {
       endDate.setHours(23, 59, 59, 999);
     } else if (period === "today") {
       // Today only
-      startDate = today;
-      endDate = now;
+       startDate = today;
+       endDate = new Date(today);
+       endDate.setDate(today.getDate() + 1);
     } else if (period === "week") {
       // Start of current week (Sunday)
       const day = now.getDay();
