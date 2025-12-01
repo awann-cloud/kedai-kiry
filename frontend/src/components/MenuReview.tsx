@@ -12,7 +12,7 @@ import MenuFilters from './MenuFilters';
 import MenuChart from './MenuChart';
 import { Download, Database, ExternalLink, ChevronLeft, ChevronRight, Calendar, SlidersHorizontal } from 'lucide-react';
 import SparkleDecorationPaths from "../imports/SparkleDecoration";
-import { imgGroup as sparkleImgGroup } from "../imports/SparkleIcon";
+import { imgGroup as sparkleImgGroup } from "../imports/SparkleIconMask";
 
 export default function MenuReview() {
   const navigate = useNavigate();
@@ -28,7 +28,7 @@ export default function MenuReview() {
   });
 
   // Quick filter state
-  const [activeQuickFilter, setActiveQuickFilter] = useState<'today' | 'week' | 'month' | 'year' | null>(null);
+  const [activeQuickFilter, setActiveQuickFilter] = useState<'yesterday' | 'today' | 'week' | 'month' | null>(null);
 
   // Show advanced filters state
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
@@ -39,21 +39,29 @@ export default function MenuReview() {
   const maxPages = 5;
 
   // Quick filter functions
-  const handleQuickFilter = (period: 'today' | 'week' | 'month' | 'year') => {
+  const handleQuickFilter = (period: 'yesterday' | 'today' | 'week' | 'month') => {
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     let startDate: Date;
+    let endDate: Date = now;
     
-    if (period === 'today') {
+    if (period === 'yesterday') {
+      // Yesterday only
+      startDate = new Date(today);
+      startDate.setDate(today.getDate() - 1);
+      endDate = new Date(today);
+      endDate.setDate(today.getDate() - 1);
+      endDate.setHours(23, 59, 59, 999);
+    } else if (period === 'today') {
+      // Today only
       startDate = today;
+      endDate = now;
     } else if (period === 'week') {
       const day = now.getDay();
       startDate = new Date(today);
       startDate.setDate(today.getDate() - day);
-    } else if (period === 'month') {
+    } else { // month
       startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-    } else {
-      startDate = new Date(now.getFullYear(), 0, 1);
     }
     
     const formatDate = (date: Date) => {
@@ -66,7 +74,7 @@ export default function MenuReview() {
     setFilters(prev => ({
       ...prev,
       startDate: formatDate(startDate),
-      endDate: formatDate(now)
+      endDate: formatDate(endDate)
     }));
     
     setActiveQuickFilter(period);
@@ -198,6 +206,26 @@ export default function MenuReview() {
           <span className="text-white/80 font-['Poppins',sans-serif] text-sm">Quick Filters:</span>
           <div className="flex gap-2">
             <button
+              onClick={() => handleQuickFilter('yesterday')}
+              className={`px-4 py-2 rounded-lg transition-colors font-['Poppins',sans-serif] text-sm ${
+                activeQuickFilter === 'yesterday'
+                  ? 'bg-purple-600 text-white'
+                  : 'bg-[rgba(126,42,126,0.46)] hover:bg-purple-600 text-white'
+              }`}
+            >
+              Yesterday
+            </button>
+            <button
+              onClick={() => handleQuickFilter('today')}
+              className={`px-4 py-2 rounded-lg transition-colors font-['Poppins',sans-serif] text-sm ${
+                activeQuickFilter === 'today'
+                  ? 'bg-purple-600 text-white'
+                  : 'bg-[rgba(126,42,126,0.46)] hover:bg-purple-600 text-white'
+              }`}
+            >
+              Today
+            </button>
+            <button
               onClick={() => handleQuickFilter('week')}
               className={`px-4 py-2 rounded-lg transition-colors font-['Poppins',sans-serif] text-sm ${
                 activeQuickFilter === 'week'
@@ -216,16 +244,6 @@ export default function MenuReview() {
               }`}
             >
               This Month
-            </button>
-            <button
-              onClick={() => handleQuickFilter('year')}
-              className={`px-4 py-2 rounded-lg transition-colors font-['Poppins',sans-serif] text-sm ${
-                activeQuickFilter === 'year'
-                  ? 'bg-purple-600 text-white'
-                  : 'bg-[rgba(126,42,126,0.46)] hover:bg-purple-600 text-white'
-              }`}
-            >
-              This Year
             </button>
             {activeQuickFilter && (
               <button

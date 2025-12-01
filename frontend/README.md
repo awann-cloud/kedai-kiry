@@ -1,7 +1,7 @@
 
-  # EXTREME DUMMY
+  # Waiter FIx HELL
 
-  This is a code bundle for EXTREME DUMMY. The original project is available at https://www.figma.com/design/koY6RQ6plSHvLVDQXkrvkn/EXTREME-DUMMY.
+  This is a code bundle for Waiter FIx HELL. The original project is available at https://www.figma.com/design/t2y23YUjdykE7oGGTR84UZ/Waiter-FIx-HELL.
 
   ## Running the code
 

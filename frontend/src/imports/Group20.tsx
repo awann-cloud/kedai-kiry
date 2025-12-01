@@ -1,5 +1,5 @@
-import svgPaths from "./svg-orp3i05os9";
-import { imgGroup } from "./svg-2ugso";
+import svgPaths from "./Group20Paths";
+import { imgGroup } from "./Group20Mask";
 
 function Icon() {
   return (

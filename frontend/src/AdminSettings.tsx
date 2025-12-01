@@ -1,6 +1,6 @@
 import { AdminRetractableSidebar } from './components/AdminRetractableSidebar';
 import SparkleDecorationPaths from "./imports/SparkleDecoration";
-import { imgGroup as sparkleImgGroup } from "./imports/SparkleIcon";
+import { imgGroup as sparkleImgGroup } from "./imports/SparkleIconMask";
 import { useOrders } from './contexts/OrderContext';
 import { useState } from 'react';
 import { Receipt } from 'lucide-react';

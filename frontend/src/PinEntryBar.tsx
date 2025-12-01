@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PinPadBackgroundPaths from "./imports/PinPadBackground";
 import BarDepartmentIconPaths from "./imports/BarDepartmentIcon";
-import { imgGroup } from "./imports/PinFrameBackground";
+import { imgGroup } from "./imports/PlaceholderSquare";
 import BackButton from "./imports/BackButton";
 import { getPinForDepartment } from './data/pinCodes';
 

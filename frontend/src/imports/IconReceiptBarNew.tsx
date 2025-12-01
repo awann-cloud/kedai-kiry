@@ -1,4 +1,4 @@
-import svgPaths from "./svg-5lj9dj6qeo";
+import svgPaths from "./IconReceiptBarNewPaths";
 
 export default function IconReceiptBarNew() {
   return (

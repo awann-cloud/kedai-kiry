@@ -1,5 +1,5 @@
-import svgPaths from "./svg-g58bs69bve";
-import { imgGroup } from "./svg-zl56d";
+import svgPaths from "./Group22Paths";
+import { imgGroup } from "./Group22Mask";
 
 function Group() {
   return (

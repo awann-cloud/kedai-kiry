@@ -21,6 +21,7 @@
  * - Department-specific titles (Select Cook/Bartender/Snack Staff)
  */
 
+import React, { useState, useEffect } from 'react';
 import svgPaths from "../imports/StaffPanelPaths";
 import { imgGroup } from "../imports/StaffPanelImages";
 import { Worker } from '../data/staff';
@@ -40,9 +41,41 @@ interface SelectCookPanelProps {
 }
 
 export default function SelectCookPanel({ isOpen, onClose, onSelectCook, itemName, orderId, itemId, department = 'kitchen' }: SelectCookPanelProps) {
-  // Get staff members for the current department from the StaffContext
-  const { getStaffByDepartment } = useStaff();
-  const staff = getStaffByDepartment(department);
+  // Get staff members from AdminStaffManagement localStorage (filtered by department)
+  const [staff, setStaff] = useState<Worker[]>([]);
+  
+  useEffect(() => {
+    // Load staff from AdminStaffManagement localStorage
+    const savedStaffList = localStorage.getItem('staffManagementList');
+    if (savedStaffList) {
+      try {
+        const staffList = JSON.parse(savedStaffList);
+        
+        // Map department names: Kitchen/Bar/Snack/Checker -> kitchen/bar/snack/waitress
+        const departmentMap: { [key: string]: string } = {
+          'Kitchen': 'kitchen',
+          'Bar': 'bar',
+          'Snack': 'snack',
+          'Checker': 'waitress'
+        };
+        
+        // Filter by department and convert to Worker format
+        const filteredStaff = staffList
+          .filter((s: any) => departmentMap[s.department] === department && s.isActive)
+          .map((s: any) => ({
+            id: s.id,
+            name: s.name,
+            position: s.position || 'Staff',
+            department: departmentMap[s.department],
+            available: s.isActive
+          }));
+        
+        setStaff(filteredStaff);
+      } catch (e) {
+        console.error('Failed to parse staff list:', e);
+      }
+    }
+  }, [department, isOpen]); // Reload when department changes or panel opens
   
   /**
    * Get panel title based on department

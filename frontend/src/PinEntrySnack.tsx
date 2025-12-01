@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PinPadBackgroundPaths from "./imports/PinPadBackground";
-import { imgGroup } from "./imports/PinFrameBackground";
+import { imgGroup } from "./imports/PlaceholderSquare";
 import BackButton from './imports/BackButton';
 import SnackIconCircle from './imports/SnackIconCircle';
 import { getPinForDepartment } from './data/pinCodes';

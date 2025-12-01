@@ -38,7 +38,7 @@ export default function StaffDetailView({
   onNotesUpdate
 }: StaffDetailViewProps) {
   const navigate = useNavigate();
-  const { getProcessedLogs, exportToCSV, updateCookingLog } = useStaff();
+  const { getProcessedLogs, exportToCSV, updateCookingLog, getDeliveryRecordsForWaiter, getWaiterStats } = useStaff();
   
   // Editing schedule state
   const [editingSchedule, setEditingSchedule] = useState(false);
@@ -63,18 +63,24 @@ export default function StaffDetailView({
   const [editingLogId, setEditingLogId] = useState<string | null>(null);
   const [editedLogData, setEditedLogData] = useState<any>(null);
 
-  // Get work history from context - filter by staff name
+  // Check if this is a waiter/waitress (Checker department)
+  const isWaiter = staffDepartment === 'Checker';
+
+  // Get work history from context - filter by staff name (for cooks)
   const workHistoryLogs = useMemo(() => {
+    if (isWaiter) return []; // Waiters don't have cooking logs
+    
     const allLogs = getProcessedLogs();
     return allLogs
       .filter(log => log.cookName === staffName)
-      .map(log => {
+      .map((log, index) => {
         const date = new Date(log.timestamp);
         const dateStr = date.toLocaleDateString('en-CA'); // YYYY-MM-DD format
         const timeStr = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
         
         return {
-          id: log.id,
+          id: `cook-${log.id}-${index}`, // Add unique prefix and index
+          originalId: log.id,
           date: dateStr,
           time: timeStr,
           menuItem: log.menuName,
@@ -83,7 +89,40 @@ export default function StaffDetailView({
           orderId: `ORD-${log.id.slice(-4).toUpperCase()}`
         };
       });
-  }, [getProcessedLogs, staffName]);
+  }, [getProcessedLogs, staffName, isWaiter]);
+
+  // Get delivery history for waiters
+  const deliveryHistoryLogs = useMemo(() => {
+    if (!isWaiter) return []; // Only for waiters
+    
+    const deliveryRecords = getDeliveryRecordsForWaiter(staffName);
+    return deliveryRecords.map((record, index) => {
+      const date = new Date(record.timestamp);
+      const dateStr = date.toLocaleDateString('en-CA');
+      const timeStr = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+      
+      const minutes = Math.floor(record.deliveryTime / 60);
+      const seconds = record.deliveryTime % 60;
+      
+      return {
+        id: `delivery-${record.itemId}-${index}`, // Add unique prefix and index
+        originalId: record.itemId,
+        date: dateStr,
+        time: timeStr,
+        menuItem: record.itemName,
+        status: 'Delivered',
+        duration: `${minutes}m ${seconds}s`,
+        orderId: record.orderId,
+        department: record.department
+      };
+    });
+  }, [getDeliveryRecordsForWaiter, staffName, isWaiter]);
+
+  // Get waiter statistics
+  const waiterStats = useMemo(() => {
+    if (!isWaiter) return { totalDeliveries: 0, averageDeliveryTime: 0 };
+    return getWaiterStats(staffName);
+  }, [getWaiterStats, staffName, isWaiter]);
 
   // Mock current work data
   const currentWork = isActive ? {
@@ -94,8 +133,21 @@ export default function StaffDetailView({
     department: staffDepartment
   } : null;
 
-  // Mock statistics data
-  const stats = {
+  // Statistics data - different for waiters vs cooks
+  const stats = isWaiter ? {
+    totalDeliveries: waiterStats.totalDeliveries,
+    averageTime: Math.floor(waiterStats.averageDeliveryTime),
+    todayDeliveries: deliveryHistoryLogs.filter(log => {
+      const today = new Date().toLocaleDateString('en-CA');
+      return log.date === today;
+    }).length,
+    thisWeekDeliveries: deliveryHistoryLogs.filter(log => {
+      const logDate = new Date(log.date);
+      const weekAgo = new Date();
+      weekAgo.setDate(weekAgo.getDate() - 7);
+      return logDate >= weekAgo;
+    }).length
+  } : {
     closedWorks: 847,
     grandSchedule: 1200,
     recentSchedule: 89,
@@ -120,11 +172,12 @@ export default function StaffDetailView({
     { name: 'Cancelled', value: 5, color: '#EF4444' }
   ];
 
-  // Calculate pagination
-  const totalPages = Math.ceil(workHistoryLogs.length / itemsPerPage);
+  // Calculate pagination - use appropriate logs based on staff type
+  const historyLogs = isWaiter ? deliveryHistoryLogs : workHistoryLogs;
+  const totalPages = Math.ceil(historyLogs.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
-  const paginatedLogs = workHistoryLogs.slice(startIndex, endIndex);
+  const paginatedLogs = historyLogs.slice(startIndex, endIndex);
 
   // Reset to page 1 when filters change
   useEffect(() => {
@@ -144,7 +197,7 @@ export default function StaffDetailView({
   const handleExportCSV = () => {
     const headers = ['ID', 'Date', 'Time', 'Menu Item', 'Status', 'Duration', 'Order ID'];
     const rows = workHistoryLogs.map(log => [
-      log.id,
+      log.originalId || log.id,
       log.date,
       log.time,
       log.menuItem,
@@ -303,7 +356,7 @@ export default function StaffDetailView({
               }`}
             >
               <History className="w-5 h-5" />
-              <span>Work History</span>
+              <span>{isWaiter ? 'Delivery History' : 'Work History'}</span>
             </button>
             <button
               onClick={() => setActiveTab('settings')}
@@ -385,19 +438,45 @@ export default function StaffDetailView({
 
           {/* Dashboard Stats */}
           {activeTab === 'overview' && (
-            <div className="grid grid-cols-3 gap-4 mb-6">
-              <div className="bg-[#3c044d] rounded-[10px] p-6">
-                <div className="text-white/70 text-sm mb-2">Closed Works</div>
-                <div className="text-white text-4xl font-semibold">{stats.closedWorks}</div>
-              </div>
-              <div className="bg-[#3c044d] rounded-[10px] p-6">
-                <div className="text-white/70 text-sm mb-2">Grand Schedule</div>
-                <div className="text-white text-4xl font-semibold">{stats.grandSchedule}</div>
-              </div>
-              <div className="bg-[#3c044d] rounded-[10px] p-6">
-                <div className="text-white/70 text-sm mb-2">Recent Schedule</div>
-                <div className="text-white text-4xl font-semibold">{stats.recentSchedule}</div>
-              </div>
+            <div className="grid grid-cols-4 gap-4 mb-6">
+              {isWaiter ? (
+                <>
+                  <div className="bg-[#3c044d] rounded-[10px] p-6">
+                    <div className="text-white/70 text-sm mb-2">Total Deliveries</div>
+                    <div className="text-white text-4xl font-semibold">{stats.totalDeliveries}</div>
+                  </div>
+                  <div className="bg-[#3c044d] rounded-[10px] p-6">
+                    <div className="text-white/70 text-sm mb-2">Avg Time</div>
+                    <div className="text-white text-4xl font-semibold">
+                      {Math.floor(stats.averageTime / 60)}:{String(stats.averageTime % 60).padStart(2, '0')}
+                    </div>
+                    <div className="text-white/50 text-xs mt-1">minutes</div>
+                  </div>
+                  <div className="bg-[#3c044d] rounded-[10px] p-6">
+                    <div className="text-white/70 text-sm mb-2">Today</div>
+                    <div className="text-white text-4xl font-semibold">{stats.todayDeliveries}</div>
+                  </div>
+                  <div className="bg-[#3c044d] rounded-[10px] p-6">
+                    <div className="text-white/70 text-sm mb-2">This Week</div>
+                    <div className="text-white text-4xl font-semibold">{stats.thisWeekDeliveries}</div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="bg-[#3c044d] rounded-[10px] p-6">
+                    <div className="text-white/70 text-sm mb-2">Closed Works</div>
+                    <div className="text-white text-4xl font-semibold">{stats.closedWorks}</div>
+                  </div>
+                  <div className="bg-[#3c044d] rounded-[10px] p-6">
+                    <div className="text-white/70 text-sm mb-2">Grand Schedule</div>
+                    <div className="text-white text-4xl font-semibold">{stats.grandSchedule}</div>
+                  </div>
+                  <div className="bg-[#3c044d] rounded-[10px] p-6">
+                    <div className="text-white/70 text-sm mb-2">Recent Schedule</div>
+                    <div className="text-white text-4xl font-semibold">{stats.recentSchedule}</div>
+                  </div>
+                </>
+              )}
             </div>
           )}
 
@@ -470,7 +549,7 @@ export default function StaffDetailView({
                     <span>/</span>
                     <span>{staffName}</span>
                     <span>/</span>
-                    <span className="text-white">Work History</span>
+                    <span className="text-white">{isWaiter ? 'Delivery History' : 'Work History'}</span>
                   </div>
                 </div>
               </div>
@@ -519,12 +598,15 @@ export default function StaffDetailView({
                         <th className="text-white text-left px-4 py-3 text-sm">Date</th>
                         <th className="text-white text-left px-4 py-3 text-sm">Time</th>
                         <th className="text-white text-left px-4 py-3 text-sm">Menu Item</th>
+                        {isWaiter && <th className="text-white text-left px-4 py-3 text-sm">Dept</th>}
                         <th className="text-white text-left px-4 py-3 text-sm">Status</th>
                         <th className="text-white text-left px-4 py-3 text-sm">Duration</th>
                         <th className="text-white text-left px-4 py-3 text-sm">Order ID</th>
-                        <th className="text-white/70 text-center px-2 py-3 w-10">
-                          <Edit2 className="w-3 h-3 mx-auto" />
-                        </th>
+                        {!isWaiter && (
+                          <th className="text-white/70 text-center px-2 py-3 w-10">
+                            <Edit2 className="w-3 h-3 mx-auto" />
+                          </th>
+                        )}
                       </tr>
                     </thead>
                     <tbody>
@@ -533,7 +615,7 @@ export default function StaffDetailView({
                           {editingLogId === log.id ? (
                             // Edit Mode
                             <>
-                              <td className="text-white/80 px-4 py-3 text-sm">{log.id}</td>
+                              <td className="text-white/80 px-4 py-3 text-sm">{log.originalId || log.id}</td>
                               <td className="px-4 py-3">
                                 <input
                                   type="date"
@@ -634,34 +716,47 @@ export default function StaffDetailView({
                           ) : (
                             // View Mode
                             <>
-                              <td className="text-white/80 px-4 py-3 text-sm">{log.id}</td>
+                              <td className="text-white/80 px-4 py-3 text-sm">{log.originalId || log.id}</td>
                               <td className="text-white/80 px-4 py-3 text-sm">{log.date}</td>
                               <td className="text-white/80 px-4 py-3 text-sm">{log.time}</td>
                               <td className="text-white px-4 py-3 text-sm">{log.menuItem}</td>
+                              {isWaiter && (
+                                <td className="text-white/80 px-4 py-3 text-sm">
+                                  <span className={`inline-flex px-2 py-1 rounded text-xs ${
+                                    log.department === 'kitchen' ? 'bg-purple-600/20 text-purple-400' :
+                                    log.department === 'bar' ? 'bg-blue-600/20 text-blue-400' :
+                                    'bg-orange-600/20 text-orange-400'
+                                  }`}>
+                                    {log.department?.toUpperCase() || 'N/A'}
+                                  </span>
+                                </td>
+                              )}
                               <td className="px-4 py-3">
                                 <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs ${
-                                  log.status === 'Completed' ? 'bg-green-600/20 text-green-400' :
+                                  log.status === 'Completed' || log.status === 'Delivered' ? 'bg-green-600/20 text-green-400' :
                                   log.status === 'Pending' ? 'bg-yellow-600/20 text-yellow-400' :
                                   'bg-red-600/20 text-red-400'
                                 }`}>
-                                  {log.status === 'Completed' ? <CheckCircle className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
+                                  {(log.status === 'Completed' || log.status === 'Delivered') ? <CheckCircle className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
                                   {log.status}
                                 </span>
                               </td>
                               <td className="text-white/80 px-4 py-3 text-sm">{log.duration}</td>
                               <td className="text-white/80 px-4 py-3 text-sm">{log.orderId}</td>
-                              <td className="px-4 py-3">
-                                <button
-                                  onClick={() => {
-                                    setEditingLogId(log.id);
-                                    setEditedLogData({ ...log });
-                                  }}
-                                  className="text-purple-400 hover:text-purple-300 transition-colors"
-                                  title="Edit"
-                                >
-                                  <Edit2 className="w-4 h-4" />
-                                </button>
-                              </td>
+                              {!isWaiter && (
+                                <td className="px-4 py-3">
+                                  <button
+                                    onClick={() => {
+                                      setEditingLogId(log.id);
+                                      setEditedLogData({ ...log });
+                                    }}
+                                    className="text-purple-400 hover:text-purple-300 transition-colors"
+                                    title="Edit"
+                                  >
+                                    <Edit2 className="w-4 h-4" />
+                                  </button>
+                                </td>
+                              )}
                             </>
                           )}
                         </tr>
@@ -750,7 +845,7 @@ export default function StaffDetailView({
                       <div key={day} className="bg-[#541168] rounded-lg p-3">
                         <div className="text-white text-sm font-semibold mb-2">{day.slice(0, 3)}</div>
                         <div className="text-white/70 text-xs">
-                          {schedule[day.toLowerCase() as keyof WeeklySchedule]?.isActive ? (
+                          {schedule[day.toLowerCase() as keyof WeeklySchedule]?.isWorking ? (
                             <>
                               <div className="text-green-400 mb-1">● Working</div>
                               <div>

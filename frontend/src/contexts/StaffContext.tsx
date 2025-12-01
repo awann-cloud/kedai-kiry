@@ -70,7 +70,19 @@ export interface WeeklySchedule {
 }
 
 /**
- * Staff member with schedule
+ * Delivery record for waiter/waitress performance tracking
+ */
+export interface DeliveryRecord {
+  itemId: string;              // Menu item ID
+  itemName: string;            // Name of the item delivered
+  orderId: string;             // Order ID
+  deliveryTime: number;        // Time taken to deliver in seconds
+  timestamp: number;           // When delivery was completed (milliseconds since epoch)
+  department: string;          // Which department (kitchen/bar/snack)
+}
+
+/**
+ * Staff member with schedule and delivery analytics
  */
 export interface StaffMember {
   id: string;
@@ -79,6 +91,9 @@ export interface StaffMember {
   position?: string;
   isActive: boolean;
   schedule?: WeeklySchedule;
+  deliveryRecords?: DeliveryRecord[];  // For waiters/waitresses only
+  totalDeliveries?: number;            // Total number of deliveries
+  averageDeliveryTime?: number;        // Average delivery time in seconds
 }
 
 /**
@@ -124,6 +139,11 @@ interface StaffContextType {
   staff: Worker[];
   updateStaffAvailability: (staffId: string, isAvailable: boolean) => void;
   getStaffByDepartment: (department: 'kitchen' | 'bar' | 'snack' | 'waitress') => Worker[];
+  
+  // Delivery tracking (for waiters/waitresses)
+  addDeliveryRecord: (waiterName: string, record: DeliveryRecord) => void;
+  getDeliveryRecordsForWaiter: (waiterName: string) => DeliveryRecord[];
+  getWaiterStats: (waiterName: string) => { totalDeliveries: number; averageDeliveryTime: number };
 }
 
 const StaffContext = createContext<StaffContextType | undefined>(undefined);
@@ -195,7 +215,7 @@ export function StaffProvider({ children }: { children: ReactNode }) {
             const minutes = Math.floor(totalSeconds / 60);
             const seconds = totalSeconds % 60;
             
-            // Create cooking log
+            // Create cooking log with startedAt, finishedAt, and waiter
             const newLog: CookingLog = {
               id: `real-${item.id}`,
               menuName: item.name,
@@ -203,12 +223,73 @@ export function StaffProvider({ children }: { children: ReactNode }) {
               timeMinutes: minutes,
               timeSeconds: seconds,
               timestamp: item.finishedTime,
-              department: department
+              department: department,
+              startedAt: item.startedTime,
+              finishedAt: item.finishedTime,
+              waiter: item.waiter || undefined // Will be populated when checker assigns waiter
             };
             
             // Add to logs and mark as tracked
             setCookingLogs(prev => [...prev, newLog]);
             setTrackedItems(prev => new Set(prev).add(item.id));
+          }
+          
+          // Update cooking log with waiter info when waiter is assigned (not delivered yet)
+          if (
+            item.status === 'finished' &&
+            item.waiter &&
+            !trackedItems.has(`waiter-assigned-${item.id}`)
+          ) {
+            // Update the cooking log with waiter name
+            setCookingLogs(prev => prev.map(log => 
+              log.id === `real-${item.id}` 
+                ? { ...log, waiter: item.waiter }
+                : log
+            ));
+            
+            // Mark as tracked so we don't update again
+            setTrackedItems(prev => new Set(prev).add(`waiter-assigned-${item.id}`));
+          }
+          
+          // ⭐ NEW FEATURE (Post v732) - Track delivered items for waiter performance
+          // Automatically detects when items are marked as delivered and records delivery analytics
+          if (
+            item.itemDelivered &&
+            item.waiter &&
+            item.deliveryStartTime &&
+            item.deliveryFinishedTime &&
+            item.deliveryElapsedTime !== undefined &&
+            !trackedItems.has(`delivery-${item.id}`)
+          ) {
+            // Create delivery record for waiter performance tracking
+            const deliveryRecord: DeliveryRecord = {
+              itemId: item.id,
+              itemName: item.name,
+              orderId: order.orderId,
+              deliveryTime: item.deliveryElapsedTime,
+              timestamp: item.deliveryFinishedTime,
+              department: department
+            };
+            
+            // Add to waiter's delivery records (for analytics)
+            addDeliveryRecord(item.waiter, deliveryRecord);
+            
+            // ⭐ NEW FEATURE (Post v732) - Update cooking log with delivery timing data
+            // This enables Raw Database to show accurate delivery times separate from cooking times
+            // Links delivery performance to the original cooking log entry
+            setCookingLogs(prev => prev.map(log => 
+              log.id === `real-${item.id}` 
+                ? { 
+                    ...log, 
+                    deliveryStartTime: item.deliveryStartTime,
+                    deliveryFinishedTime: item.deliveryFinishedTime,
+                    deliveryElapsedTime: item.deliveryElapsedTime
+                  }
+                : log
+            ));
+            
+            // Mark as tracked so we don't record this delivery multiple times
+            setTrackedItems(prev => new Set(prev).add(`delivery-${item.id}`));
           }
         });
       });
@@ -405,6 +486,61 @@ export function StaffProvider({ children }: { children: ReactNode }) {
     return staff.filter(worker => worker.department.toLowerCase() === department);
   };
 
+  /**
+   * Delivery records state (for waiters/waitresses)
+   * Stores delivery performance data
+   */
+  const [deliveryRecords, setDeliveryRecords] = useState<Map<string, DeliveryRecord[]>>(() => {
+    const saved = localStorage.getItem('deliveryRecords');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return new Map(Object.entries(parsed));
+      } catch (e) {
+        console.error('Failed to parse delivery records:', e);
+      }
+    }
+    return new Map();
+  });
+
+  // Save delivery records to localStorage
+  useEffect(() => {
+    const recordsObj = Object.fromEntries(deliveryRecords);
+    localStorage.setItem('deliveryRecords', JSON.stringify(recordsObj));
+  }, [deliveryRecords]);
+
+  /**
+   * Add delivery record for a waiter
+   */
+  const addDeliveryRecord = (waiterName: string, record: DeliveryRecord) => {
+    setDeliveryRecords(prev => {
+      const newMap = new Map(prev);
+      const existing = newMap.get(waiterName) || [];
+      newMap.set(waiterName, [...existing, record]);
+      return newMap;
+    });
+  };
+
+  /**
+   * Get delivery records for a specific waiter
+   */
+  const getDeliveryRecordsForWaiter = (waiterName: string): DeliveryRecord[] => {
+    return deliveryRecords.get(waiterName) || [];
+  };
+
+  /**
+   * Get waiter statistics (total deliveries, average time)
+   */
+  const getWaiterStats = (waiterName: string) => {
+    const records = getDeliveryRecordsForWaiter(waiterName);
+    const totalDeliveries = records.length;
+    const averageDeliveryTime = totalDeliveries > 0
+      ? records.reduce((sum, r) => sum + r.deliveryTime, 0) / totalDeliveries
+      : 0;
+    
+    return { totalDeliveries, averageDeliveryTime };
+  };
+
   const value: StaffContextType = {
     cookingLogs,
     getProcessedLogs,
@@ -418,7 +554,10 @@ export function StaffProvider({ children }: { children: ReactNode }) {
     toggleDataSource,
     staff,
     updateStaffAvailability,
-    getStaffByDepartment
+    getStaffByDepartment,
+    addDeliveryRecord,
+    getDeliveryRecordsForWaiter,
+    getWaiterStats
   };
 
   return <StaffContext.Provider value={value}>{children}</StaffContext.Provider>;

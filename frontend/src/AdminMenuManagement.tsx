@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { AdminRetractableSidebar } from './components/AdminRetractableSidebar';
-import { Search, Plus, RotateCcw, Save, RefreshCw, Check, MoreVertical, XCircle, CheckCircle, Loader2, AlertCircle } from 'lucide-react';
+import { Search, Plus, RotateCcw, Save, RefreshCw, Check, MoreVertical, XCircle, CheckCircle, Loader2, AlertCircle, Pen, Trash2 } from 'lucide-react';
 import { discoverAllMenuItems, type DiscoveredMenuItem } from './data/menuItemsUtils';
 import {
   type MenuItemConfig,
@@ -12,10 +13,25 @@ import {
   getDefaultStandardTime
 } from './data/menuItemEfficiency';
 import SparkleDecorationPaths from "./imports/SparkleDecoration";
-import { imgGroup as sparkleImgGroup } from "./imports/SparkleIcon";
+import { imgGroup as sparkleImgGroup } from "./imports/SparkleIconMask";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from './components/ui/dropdown-menu';
+import { MenuItemEditDialog } from './components/admin/MenuItemEditDialog';
+import { MenuItemDeleteDialog } from './components/admin/MenuItemDeleteDialog';
 
 export default function AdminMenuManagement() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [discoveredItems] = useState<DiscoveredMenuItem[]>(discoverAllMenuItems());
+  
+  // Dialog states for cosmetic edit/delete
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [itemToEdit, setItemToEdit] = useState<{ name: string; category: "Kitchen" | "Bar" | "Snack" } | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<string | null>(null);
   
   // Saved configs from localStorage
   const [savedConfigs, setSavedConfigs] = useState<Map<string, MenuItemConfig>>(() => {
@@ -25,14 +41,28 @@ export default function AdminMenuManagement() {
   // Working/draft configs (what user is currently editing)
   const [workingConfigs, setWorkingConfigs] = useState<Map<string, MenuItemConfig>>(new Map());
   
-  const [selectedItemName, setSelectedItemName] = useState<string | null>(
-    discoveredItems.length > 0 ? discoveredItems[0].name : null
-  );
+  // Check URL params for item selection
+  const urlItemParam = searchParams.get('item');
+  const initialItem = urlItemParam && discoveredItems.find(i => i.name === urlItemParam)
+    ? urlItemParam
+    : (discoveredItems.length > 0 ? discoveredItems[0].name : null);
+  
+  const [selectedItemName, setSelectedItemName] = useState<string | null>(initialItem);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'kitchen' | 'bar' | 'snack'>('all');
   const [resetButtonState, setResetButtonState] = useState<'default' | 'loading' | 'success'>('default');
   const [saveButtonState, setSaveButtonState] = useState<'default' | 'saving' | 'success'>('default');
   const [validationErrors, setValidationErrors] = useState<Map<string, Map<string, string>>>(new Map());
+
+  // Handle URL parameter changes
+  useEffect(() => {
+    const itemParam = searchParams.get('item');
+    if (itemParam && discoveredItems.find(i => i.name === itemParam)) {
+      setSelectedItemName(itemParam);
+      // Clear the URL parameter after selecting
+      setSearchParams({});
+    }
+  }, [searchParams, discoveredItems, setSearchParams]);
 
   // Get current config for selected item (working or saved)
   const getSelectedConfig = (): MenuItemConfig | null => {
@@ -273,10 +303,18 @@ export default function AdminMenuManagement() {
           <div className="w-[400px] bg-[#3c044d] border-r border-white/10 flex flex-col">
             <div className="p-4 border-b border-white/10">
               <div className="flex items-center justify-between mb-2">
-                <h2 className="text-white font-['Poppins',sans-serif]">Menu Items</h2>
-                <span className="text-white/50 text-xs font-['Poppins',sans-serif]">
-                  {filteredItems.length} of {discoveredItems.length} items
-                </span>
+                <div className="flex flex-col gap-1">
+                  <h2 className="text-white font-['Poppins',sans-serif]">Menu Items</h2>
+                  <span className="text-white/50 text-xs font-['Poppins',sans-serif]">
+                    {filteredItems.length} of {discoveredItems.length} items
+                  </span>
+                </div>
+                <button 
+                  className="w-8 h-8 bg-purple-600/30 hover:bg-purple-600/50 border border-purple-400/30 hover:border-purple-400 rounded flex items-center justify-center transition-all"
+                  onClick={() => {/* TODO: Add new item functionality */}}
+                >
+                  <Plus className="w-5 h-5 text-white" />
+                </button>
               </div>
             </div>
 
@@ -307,24 +345,69 @@ export default function AdminMenuManagement() {
                   return (
                     <div
                       key={item.name}
-                      onClick={() => setSelectedItemName(item.name)}
-                      className={`p-4 rounded-lg mb-1.5 cursor-pointer transition-all min-h-[72px] flex flex-col justify-center ${
+                      className={`p-4 rounded-lg mb-1.5 transition-all min-h-[72px] flex flex-col justify-center ${
                         selectedItemName === item.name
                           ? 'bg-purple-600/30 border border-purple-400'
                           : 'hover:bg-white/5 border border-transparent'
                       }`}
                     >
                       <div className="flex items-center justify-between">
-                        <span className="text-white text-[15px] font-['Poppins',sans-serif]">
+                        <span 
+                          className="text-white text-[15px] font-['Poppins',sans-serif] cursor-pointer flex-1"
+                          onClick={() => setSelectedItemName(item.name)}
+                        >
                           {item.name}
                         </span>
-                        {itemHasUnsavedChanges && (
-                          <span className="text-[10px] text-yellow-400 font-['Poppins',sans-serif] bg-yellow-400/10 px-1.5 py-0.5 rounded">
-                            Unsaved
-                          </span>
-                        )}
+                        <div className="flex items-center gap-2">
+                          {itemHasUnsavedChanges && (
+                            <span className="text-[10px] text-yellow-400 font-['Poppins',sans-serif] bg-yellow-400/10 px-1.5 py-0.5 rounded">
+                              Unsaved
+                            </span>
+                          )}
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <button
+                                onClick={(e) => e.stopPropagation()}
+                                className="p-1.5 hover:bg-white/10 rounded transition-colors"
+                                title="Menu"
+                              >
+                                <MoreVertical className="w-4 h-4 text-white/60 hover:text-white" />
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent className="bg-[#3c044d] border-[#8b6dac] text-white">
+                              <DropdownMenuItem
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setItemToEdit({ 
+                                    name: item.name, 
+                                    category: item.department.charAt(0).toUpperCase() + item.department.slice(1) as "Kitchen" | "Bar" | "Snack"
+                                  });
+                                  setEditDialogOpen(true);
+                                }}
+                                className="cursor-pointer hover:bg-white/10"
+                              >
+                                <Pen className="w-4 h-4 mr-2" />
+                                Edit
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setItemToDelete(item.name);
+                                  setDeleteDialogOpen(true);
+                                }}
+                                className="cursor-pointer text-red-400 hover:bg-red-400/10"
+                              >
+                                <Trash2 className="w-4 h-4 mr-2" />
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2 mt-1">
+                      <div 
+                        className="flex items-center gap-2 mt-1 cursor-pointer"
+                        onClick={() => setSelectedItemName(item.name)}
+                      >
                         <span className="text-sm text-white/60 font-['Poppins',sans-serif] capitalize flex items-center gap-1.5">
                           <span className="w-1.5 h-1.5 rounded-full bg-white/60"></span>
                           {item.department}
@@ -486,6 +569,25 @@ export default function AdminMenuManagement() {
           </div>
         </div>
       </div>
+
+      {/* Cosmetic Edit Dialog */}
+      {itemToEdit && (
+        <MenuItemEditDialog
+          open={editDialogOpen}
+          onOpenChange={setEditDialogOpen}
+          itemName={itemToEdit.name}
+          currentCategory={itemToEdit.category}
+        />
+      )}
+
+      {/* Cosmetic Delete Dialog */}
+      {itemToDelete && (
+        <MenuItemDeleteDialog
+          open={deleteDialogOpen}
+          onOpenChange={setDeleteDialogOpen}
+          itemName={itemToDelete}
+        />
+      )}
     </div>
   );
 }

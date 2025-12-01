@@ -68,6 +68,12 @@ interface OrderContextType {
   // Assign waiter/waitress to completed order (Checker only)
   assignWaiter: (department: Department, orderId: string, waiterName: string) => void;
   
+  // Assign waiter/waitress to a specific menu item (Checker only)
+  assignWaiterToItem: (department: Department, orderId: string, itemId: string, waiterName: string) => void;
+  
+  // Mark item as delivered to customer - final step (Checker only)
+  markItemDelivered: (department: Department, orderId: string, itemId: string) => void;
+  
   // Mark order as delivered to customer - final step (Checker only)
   markDelivered: (department: Department, orderId: string) => void;
 }
@@ -90,10 +96,14 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   const [snackOrders, setSnackOrders] = useState<Order[]>(initialSnackOrdersData);
 
   /**
-   * Timer Effect - Updates elapsed time for all in-progress items
+   * Timer Effect - Updates elapsed time for all in-progress items and delivery times
    * 
-   * Runs every second and updates the elapsedTime for all items
-   * with status 'on-their-way' across all departments.
+   * Runs every second and updates:
+   * 1. elapsedTime for items with status 'on-their-way' (cooking timer)
+   * 2. deliveryElapsedTime for items with assigned waiter but not yet delivered (delivery timer)
+   * 
+   * ⭐ UPDATED (Post v732): Added delivery timer tracking for waiter performance monitoring
+   * 
    * This creates the live timer effect you see on all pages.
    */
   useEffect(() => {
@@ -102,13 +112,19 @@ export function OrderProvider({ children }: { children: ReactNode }) {
         orders.map(order => ({
           ...order,
           items: order.items.map(item => {
+            let updatedItem = { ...item };
+            
+            // Update cooking elapsed time
             if (item.status === 'on-their-way' && item.startedTime) {
-              return {
-                ...item,
-                elapsedTime: Math.floor((Date.now() - item.startedTime) / 1000)
-              };
+              updatedItem.elapsedTime = Math.floor((Date.now() - item.startedTime) / 1000);
             }
-            return item;
+            
+            // ⭐ NEW FEATURE (Post v732) - Update delivery elapsed time for waiter tracking
+            if (item.waiter && item.deliveryStartTime && !item.itemDelivered) {
+              updatedItem.deliveryElapsedTime = Math.floor((Date.now() - item.deliveryStartTime) / 1000);
+            }
+            
+            return updatedItem;
           })
         }));
 
@@ -286,15 +302,124 @@ export function OrderProvider({ children }: { children: ReactNode }) {
    * Assign Waiter - Add waiter name to order (Checker only)
    * 
    * Updates the order with:
-   * - waiter: assigned waiter name
+   * - waiter: assigned waiter name (applies to all items in order)
+   * - deliveryStartTime: starts delivery timer for items WITHOUT a waiter
+   * - deliveryElapsedTime: initialized to 0 for newly assigned items
+   * 
+   * ⭐ UPDATED (Post v732): Now starts delivery timer for each item when "ASSIGN ALL" is clicked
+   * ⭐ UPDATED (29 Nov 2025): Only assigns to items that DON'T already have a waiter (no overwrite)
    */
   const assignWaiter = (department: Department, orderId: string, waiterName: string) => {
+    const currentTime = Date.now();
     const updateOrders = (orders: Order[]) =>
       orders.map(order =>
         order.id === orderId
           ? {
               ...order,
-              waiter: waiterName
+              waiter: waiterName,
+              items: order.items.map(item => 
+                // ⭐ Only assign if item doesn't already have a waiter
+                !item.waiter ? {
+                  ...item,
+                  waiter: waiterName,
+                  deliveryStartTime: currentTime,
+                  deliveryElapsedTime: 0
+                } : item // Keep existing waiter assignment
+              )
+            }
+          : order
+      );
+
+    // Update the appropriate department's orders
+    switch (department) {
+      case 'kitchen':
+        setKitchenOrders(updateOrders);
+        break;
+      case 'bar':
+        setBarOrders(updateOrders);
+        break;
+      case 'snack':
+        setSnackOrders(updateOrders);
+        break;
+    }
+  };
+
+  /**
+   * ⭐ NEW FEATURE (Post v732) - Assign Waiter to Item
+   * 
+   * Assign waiter name to specific menu item (Checker only)
+   * Enables per-item waiter assignment instead of per-receipt assignment
+   * 
+   * Updates a specific item within an order with:
+   * - waiter: assigned waiter name (only for this item)
+   * - deliveryStartTime: current timestamp (start delivery timer)
+   * - deliveryElapsedTime: initialized to 0
+   */
+  const assignWaiterToItem = (department: Department, orderId: string, itemId: string, waiterName: string) => {
+    const updateOrders = (orders: Order[]) =>
+      orders.map(order =>
+        order.id === orderId
+          ? {
+              ...order,
+              items: order.items.map(item =>
+                item.id === itemId
+                  ? {
+                      ...item,
+                      waiter: waiterName,
+                      deliveryStartTime: Date.now(),
+                      deliveryElapsedTime: 0
+                    }
+                  : item
+              )
+            }
+          : order
+      );
+
+    // Update the appropriate department's orders
+    switch (department) {
+      case 'kitchen':
+        setKitchenOrders(updateOrders);
+        break;
+      case 'bar':
+        setBarOrders(updateOrders);
+        break;
+      case 'snack':
+        setSnackOrders(updateOrders);
+        break;
+    }
+  };
+
+  /**
+   * ⭐ NEW FEATURE (Post v732) - Mark Item Delivered
+   * 
+   * Mark a specific item as delivered (Checker only)
+   * Completes the per-item delivery workflow
+   * 
+   * Updates the item with:
+   * - itemDelivered: true
+   * - deliveryFinishedTime: current timestamp
+   * - deliveryElapsedTime: final delivery time in seconds
+   * 
+   * NOTE: Delivery records are automatically tracked by StaffContext's monitoring effect.
+   * When an item is marked as delivered, StaffContext will detect the change and add
+   * a DeliveryRecord to the assigned waiter's performance history.
+   */
+  const markItemDelivered = (department: Department, orderId: string, itemId: string) => {
+    const updateOrders = (orders: Order[]) =>
+      orders.map(order =>
+        order.id === orderId
+          ? {
+              ...order,
+              items: order.items.map(item =>
+                item.id === itemId && item.deliveryStartTime
+                  ? {
+                      ...item,
+                      itemDelivered: true,
+                      deliveryFinishedTime: Date.now(),
+                      deliveryElapsedTime: Math.floor((Date.now() - item.deliveryStartTime) / 1000)
+                    }
+                  : item
+              )
             }
           : order
       );
@@ -319,15 +444,35 @@ export function OrderProvider({ children }: { children: ReactNode }) {
    * Updates the order with:
    * - delivered: true
    * - deliveredTime: current timestamp
+   * 
+   * ⭐ UPDATED (29 Nov 2025): Now automatically marks all items with assigned waiters as delivered
+   * Also marks all items with assigned waiters as delivered:
+   * - itemDelivered: true
+   * - deliveryFinishedTime: current timestamp
+   * - deliveryElapsedTime: final delivery time in seconds
+   * 
+   * This ensures waiter performance tracking is complete when "All Delivered" button is pressed.
    */
   const markDelivered = (department: Department, orderId: string) => {
+    const currentTime = Date.now();
     const updateOrders = (orders: Order[]) =>
       orders.map(order =>
         order.id === orderId
           ? {
               ...order,
               delivered: true,
-              deliveredTime: Date.now()
+              deliveredTime: currentTime,
+              // ⭐ NEW (29 Nov 2025): Auto-mark all items with waiters as delivered
+              items: order.items.map(item =>
+                item.waiter && !item.itemDelivered && item.deliveryStartTime
+                  ? {
+                      ...item,
+                      itemDelivered: true,
+                      deliveryFinishedTime: currentTime,
+                      deliveryElapsedTime: Math.floor((currentTime - item.deliveryStartTime) / 1000)
+                    }
+                  : item
+              )
             }
           : order
       );
@@ -354,6 +499,8 @@ export function OrderProvider({ children }: { children: ReactNode }) {
     finishItem,
     completeOrder,
     assignWaiter,
+    assignWaiterToItem,
+    markItemDelivered,
     markDelivered
   };
 

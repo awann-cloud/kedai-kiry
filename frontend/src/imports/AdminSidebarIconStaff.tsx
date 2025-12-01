@@ -1,5 +1,5 @@
-import svgPaths from "./svg-0khmd85az0";
-import { imgGroup } from "./svg-6m1b5";
+import svgPaths from "./AdminSidebarStaffIconPaths";
+import { imgGroup } from "./AdminSidebarStaffIconMask";
 
 function Group() {
   return (

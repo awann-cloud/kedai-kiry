@@ -1,4 +1,4 @@
-import svgPaths from "./svg-xb5pvogc6l";
+import svgPaths from "./AdminSidebarDatabaseIconPaths";
 
 export default function AdminSidebarIconDatabase() {
   return (

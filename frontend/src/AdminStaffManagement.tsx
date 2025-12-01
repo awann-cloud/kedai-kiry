@@ -10,7 +10,7 @@ import { getPinForDepartment } from './data/pinCodes';
 import { WeeklySchedule } from './contexts/StaffContext';
 import { isStaffActiveBySchedule } from './utils/scheduleUtils';
 import SparkleDecorationPaths from "./imports/SparkleDecoration";
-import { imgGroup as sparkleImgGroup } from "./imports/SparkleIcon";
+import { imgGroup as sparkleImgGroup } from "./imports/SparkleIconMask";
 
 interface StaffMember {
   id: string;
@@ -205,7 +205,25 @@ export default function AdminStaffManagement() {
     if (editingStaff) {
       setStaffList(prev => prev.map(s => s.id === staff.id ? staff : s));
     } else {
-      const newId = (Math.max(...staffList.map(s => parseInt(s.id))) + 1).toString().padStart(3, '0');
+      // Generate ID based on department prefix
+      const departmentPrefix = {
+        'Kitchen': 'k',
+        'Bar': 'b',
+        'Snack': 's',
+        'Checker': 'w'
+      }[staff.department];
+      
+      // Find highest number for this department prefix
+      const existingIdsForDepartment = staffList
+        .filter(s => s.id.startsWith(departmentPrefix))
+        .map(s => {
+          const match = s.id.match(/\d+/);
+          return match ? parseInt(match[0]) : 0;
+        })
+        .filter(n => !isNaN(n));
+      
+      const maxId = existingIdsForDepartment.length > 0 ? Math.max(...existingIdsForDepartment) : 0;
+      const newId = `${departmentPrefix}${maxId + 1}`;
       setStaffList(prev => [...prev, { ...staff, id: newId }]);
     }
     setIsModalOpen(false);
@@ -467,13 +485,20 @@ export default function AdminStaffManagement() {
             </thead>
             <tbody>
               {filteredStaffList.map((member, index) => (
-                <tr key={member.id} className={index !== filteredStaffList.length - 1 ? 'border-b border-white/10' : ''}>
+                <tr 
+                  key={member.id} 
+                  onClick={() => setSelectedStaff(member)}
+                  className={`cursor-pointer hover:bg-purple-600/20 transition-colors ${index !== filteredStaffList.length - 1 ? 'border-b border-white/10' : ''}`}
+                >
                   <td className="text-white px-6 py-4 text-sm">{member.id}</td>
                   <td className="text-white px-6 py-4 text-sm">{member.name}</td>
                   <td className="text-white px-6 py-4 text-sm">{member.department}</td>
                   <td className="px-6 py-4">
                     <button
-                      onClick={() => handleToggleActive(member.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleToggleActive(member.id);
+                      }}
                       className={`flex items-center gap-2 px-3 py-1 rounded-md text-sm transition-colors ${
                         member.isActive 
                           ? 'bg-green-600/20 text-green-400 hover:bg-green-600/30' 
@@ -496,7 +521,10 @@ export default function AdminStaffManagement() {
                   <td className="px-6 py-4">
                     <div className="flex items-center justify-end gap-2">
                       <button
-                        onClick={() => setSelectedStaff(member)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedStaff(member);
+                        }}
                         className="bg-[#541168] hover:bg-[#6b1583] text-white px-4 py-1.5 rounded-[10px] text-sm shadow transition-colors"
                       >
                         Detail

@@ -2,8 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PinPadBackgroundPaths from "./imports/PinPadBackground";
 import CookChefIconPaths from "./imports/CookChefIcon";
-import { imgGroup } from "./imports/PinFrameBackground";
-import Frame9 from "./imports/Frame9";
+import { imgGroup } from "./imports/PlaceholderSquare";
 import BackButton from "./imports/BackButton";
 import { getPinForDepartment } from './data/pinCodes';
 

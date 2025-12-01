@@ -26,6 +26,18 @@ export interface CookingLog {
   timeSeconds: number;     // Seconds portion of cooking time (0-59)
   timestamp: number;       // When the dish was cooked (milliseconds since epoch)
   department: 'kitchen' | 'bar' | 'snack'; // Which department
+  startedAt?: number;      // Timestamp when cooking started (milliseconds since epoch)
+  finishedAt?: number;     // Timestamp when cooking finished (milliseconds since epoch)
+  waiter?: string;         // Name of waiter/waitress assigned by checker (optional)
+  
+  // ⭐ NEW FEATURE - Delivery Timing Tracking (Post v732)
+  // These fields track waiter delivery performance separately from cooking times
+  // POPULATED BY: StaffContext monitoring effect when items are marked as delivered
+  // ENABLES: Raw Database page to display delivery analytics alongside cooking analytics
+  // UPDATED (29 Nov 2025): Auto-populated when "All Delivered" is pressed via OrderContext.markDelivered()
+  deliveryStartTime?: number;    // Timestamp when waiter was assigned (milliseconds since epoch)
+  deliveryFinishedTime?: number; // Timestamp when delivery was completed (milliseconds since epoch)
+  deliveryElapsedTime?: number;  // Total delivery time in seconds (deliveryFinishedTime - deliveryStartTime)
 }
 
 /**

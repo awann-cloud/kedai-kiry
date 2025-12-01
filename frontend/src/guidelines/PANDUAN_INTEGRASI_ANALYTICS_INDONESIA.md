@@ -68,6 +68,142 @@ Folder ini berisi dokumentasi lengkap untuk sistem analytics efisiensi memasak d
 - ✅ Export CSV
 - ✅ Klasifikasi efisiensi
 - ✅ Kemampuan filtering
+- ✅ **Quick Filters** ⭐ UPDATE (29 Nov 2025): Yesterday, Today, This Week, This Month
+
+---
+
+## ⚡ Quick Filters (UPDATE 29 Nov 2025)
+
+### Filter yang Tersedia
+
+| Filter | Range | Contoh (Today: 29 Nov 2025) |
+|--------|-------|---------------------------|
+| **Yesterday** | Kemarin 00:00 - 23:59 | 28 Nov 00:00 - 28 Nov 23:59 |
+| **Today** | Hari ini 00:00 - now | 29 Nov 00:00 - 29 Nov 14:30 (current time) |
+| **This Week** | Minggu ini dari Minggu | 24 Nov (Sun) - 29 Nov (now) |
+| **This Month** | Bulan ini dari tanggal 1 | 1 Nov - 29 Nov (now) |
+
+### Implementasi
+
+```typescript
+const handleQuickFilter = (period: 'yesterday' | 'today' | 'week' | 'month') => {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  let startDate: Date;
+  let endDate: Date = now;
+  
+  if (period === 'yesterday') {
+    // Yesterday only: full day
+    startDate = new Date(today);
+    startDate.setDate(today.getDate() - 1);
+    endDate = new Date(today);
+    endDate.setDate(today.getDate() - 1);
+    endDate.setHours(23, 59, 59, 999);
+  } else if (period === 'today') {
+    // Today only: from midnight to now
+    startDate = today;
+    endDate = now;
+  } else if (period === 'week') {
+    // Start of current week (Sunday)
+    const day = now.getDay();
+    startDate = new Date(today);
+    startDate.setDate(today.getDate() - day);
+  } else { // month
+    // Start of current month
+    startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+  }
+  
+  // Format and set filters
+  setFilters({
+    startDate: formatDate(startDate),
+    endDate: formatDate(endDate)
+  });
+};
+```
+
+### Lokasi Implementasi
+
+Quick Filters tersedia di 3 halaman admin:
+
+1. **CookingAnalytics** (`/components/CookingAnalytics.tsx`)
+   - Efficiency analytics dashboard
+   - Filter cooking logs by date
+
+2. **MenuReview** (`/components/MenuReview.tsx`)
+   - Menu performance statistics
+   - Aggregate menu data by date range
+
+3. **AdminRawDatabase** (`/AdminRawDatabase.tsx`)
+   - Raw order data view
+   - Filter order database
+
+### UI Implementation
+
+```tsx
+<div className="flex gap-2">
+  <button
+    onClick={() => handleQuickFilter('yesterday')}
+    className={`px-4 py-2 rounded-lg transition-colors ${
+      activeQuickFilter === 'yesterday'
+        ? 'bg-purple-600 text-white'
+        : 'bg-[rgba(126,42,126,0.46)] hover:bg-purple-600 text-white'
+    }`}
+  >
+    Yesterday
+  </button>
+  
+  <button
+    onClick={() => handleQuickFilter('today')}
+    className={`px-4 py-2 rounded-lg transition-colors ${
+      activeQuickFilter === 'today'
+        ? 'bg-purple-600 text-white'
+        : 'bg-[rgba(126,42,126,0.46)] hover:bg-purple-600 text-white'
+    }`}
+  >
+    Today
+  </button>
+  
+  <button
+    onClick={() => handleQuickFilter('week')}
+    className={`px-4 py-2 rounded-lg transition-colors ${
+      activeQuickFilter === 'week'
+        ? 'bg-purple-600 text-white'
+        : 'bg-[rgba(126,42,126,0.46)] hover:bg-purple-600 text-white'
+    }`}
+  >
+    This Week
+  </button>
+  
+  <button
+    onClick={() => handleQuickFilter('month')}
+    className={`px-4 py-2 rounded-lg transition-colors ${
+      activeQuickFilter === 'month'
+        ? 'bg-purple-600 text-white'
+        : 'bg-[rgba(126,42,126,0.46)] hover:bg-purple-600 text-white'
+    }`}
+  >
+    This Month
+  </button>
+  
+  {activeQuickFilter && (
+    <button
+      onClick={clearQuickFilter}
+      className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white"
+    >
+      Clear Filter
+    </button>
+  )}
+</div>
+```
+
+### Changelog
+
+**29 November 2025:**
+- ❌ Removed: "This Year" filter (terlalu broad untuk daily operations)
+- ✅ Added: "Yesterday" filter (untuk review kemarin)
+- ✅ Added: "Today" filter (untuk monitoring real-time hari ini)
+- ✅ Updated: Logic untuk single-day filtering (Yesterday, Today)
+- ✅ Improved: UX dengan clear filter button
 
 ---
 
@@ -484,6 +620,25 @@ Admin Dashboard tampilkan hasil
 3. Filter berdasarkan karyawan tertentu
 4. ✅ Harus melihat hanya record karyawan tersebut
 ```
+
+### Skenario Test 4: Quick Filters ⭐ UPDATE (29 Nov 2025)
+```
+1. Buka /admin → CookingAnalytics
+2. Test Quick Filters:
+   - Click "Yesterday" → ✅ Shows only yesterday's data
+   - Click "Today" → ✅ Shows only today's data (00:00 - now)
+   - Click "This Week" → ✅ Shows current week from Sunday
+   - Click "This Month" → ✅ Shows current month from 1st
+3. Verify date range updates correctly
+4. Test clear filter button
+5. ✅ All filters should work instantly
+```
+
+**Quick Filters Update:**
+- ❌ Removed: "This Year" filter
+- ✅ Added: "Yesterday" dan "Today" filters
+- ✅ Updated logic untuk single-day filtering
+- ✅ Applied to: CookingAnalytics, MenuReview, AdminRawDatabase
 
 ---
 

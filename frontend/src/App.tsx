@@ -38,6 +38,7 @@
 import { HashRouter, Routes, Route } from 'react-router-dom';
 import { OrderProvider } from './contexts/OrderContext';
 import { StaffProvider } from './contexts/StaffContext';
+import { WaiterProvider } from './contexts/WaiterContext'; // ⭐ NEW (Post v732)
 import Login from './Login';
 import Home from './Home';
 import PinEntryMakanan from './PinEntryMakanan';
@@ -64,8 +65,10 @@ export default function App() {
     // All order updates sync across all pages automatically via React Context
     <OrderProvider>
       <StaffProvider>
-        {/* HashRouter is used for client-side routing (works well with static hosting) */}
-        <HashRouter>
+        {/* ⭐ WaiterProvider (Post v732) - Handles waiter assignment & delivery tracking */}
+        <WaiterProvider>
+          {/* HashRouter is used for client-side routing (works well with static hosting) */}
+          <HashRouter>
           <Routes>
           {/* Login Page - Landing page with options to go to Display or Admin */}
           <Route path="/" element={<Login />} />
@@ -107,8 +110,9 @@ export default function App() {
           
           {/* Admin Settings Route */}
           <Route path="/admin-settings" element={<AdminSettings />} /> {/* Admin settings dashboard */}
-        </Routes>
-        </HashRouter>
+          </Routes>
+          </HashRouter>
+        </WaiterProvider>
       </StaffProvider>
     </OrderProvider>
   );

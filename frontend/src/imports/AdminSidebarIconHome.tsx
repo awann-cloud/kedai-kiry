@@ -1,4 +1,4 @@
-import svgPaths from "./svg-2ln9ej5e0x";
+import svgPaths from "./AdminSidebarHomeIconPaths";
 
 export default function AdminSidebarIconHome() {
   return (

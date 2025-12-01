@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   useStaff,
@@ -7,6 +7,10 @@ import {
 import { useOrders } from "./contexts/OrderContext";
 import AnalyticsFilters from "./components/AnalyticsFilters";
 import { AdminRetractableSidebar } from "./components/AdminRetractableSidebar";
+import { AdminRawDatabaseViewEmployee } from "./components/AdminRawDatabaseViewEmployee";
+import { AdminRawDatabaseViewMenu } from "./components/AdminRawDatabaseViewMenu";
+import { AdminRawDatabaseViewReceipt } from "./components/AdminRawDatabaseViewReceipt";
+import { AdminRawDatabaseViewConfig } from "./components/AdminRawDatabaseViewConfig";
 import {
   Download,
   ChevronLeft,
@@ -23,7 +27,7 @@ import {
 } from "lucide-react";
 import { getEfficiencyLevels, getAllSavedConfigs } from "./data/menuItemEfficiency";
 import SparkleDecorationPaths from "./imports/SparkleDecoration";
-import { imgGroup as sparkleImgGroup } from "./imports/SparkleIcon";
+import { imgGroup as sparkleImgGroup } from "./imports/SparkleIconMask";
 
 export default function AdminRawDatabase() {
   const navigate = useNavigate();
@@ -59,7 +63,7 @@ export default function AdminRawDatabase() {
 
   // Quick filter state
   const [activeQuickFilter, setActiveQuickFilter] = useState<
-    "week" | "month" | "year" | null
+    "yesterday" | "today" | "week" | "month" | null
   >(null);
 
   // Advanced filter states
@@ -90,7 +94,7 @@ export default function AdminRawDatabase() {
 
   // Quick filter functions
   const handleQuickFilter = (
-    period: "week" | "month" | "year",
+    period: "yesterday" | "today" | "week" | "month",
   ) => {
     const now = new Date();
     const today = new Date(
@@ -99,23 +103,32 @@ export default function AdminRawDatabase() {
       now.getDate(),
     );
     let startDate: Date;
+    let endDate: Date = now;
 
-    if (period === "week") {
+    if (period === "yesterday") {
+      // Yesterday only
+      startDate = new Date(today);
+      startDate.setDate(today.getDate() - 1);
+      endDate = new Date(today);
+      endDate.setDate(today.getDate() - 1);
+      endDate.setHours(23, 59, 59, 999);
+    } else if (period === "today") {
+      // Today only
+      startDate = today;
+      endDate = now;
+    } else if (period === "week") {
       // Start of current week (Sunday)
       const day = now.getDay();
       startDate = new Date(today);
       startDate.setDate(today.getDate() - day);
-    } else if (period === "month") {
+    } else {
+      // month
       // Start of current month
       startDate = new Date(
         now.getFullYear(),
         now.getMonth(),
         1,
       );
-    } else {
-      // year
-      // Start of current year
-      startDate = new Date(now.getFullYear(), 0, 1);
     }
 
     // Format dates as YYYY-MM-DD
@@ -132,7 +145,7 @@ export default function AdminRawDatabase() {
     setFilters((prev) => ({
       ...prev,
       startDate: formatDate(startDate),
-      endDate: formatDate(now),
+      endDate: formatDate(endDate),
     }));
 
     setActiveQuickFilter(period);
@@ -212,16 +225,21 @@ export default function AdminRawDatabase() {
   });
 
   // Calculate pagination
-  const actualTotalPages = Math.ceil(
-    processedLogs.length / itemsPerPage,
-  );
+  // For menu view, count unique menu items instead of individual logs
+  const getUniqueMenuCount = () => {
+    if (activeCategory !== "menu") return processedLogs.length;
+    const uniqueMenus = new Set(processedLogs.map(log => log.menuName));
+    return uniqueMenus.size;
+  };
+  
+  const totalRecords = activeCategory === "menu" ? getUniqueMenuCount() : processedLogs.length;
+  const actualTotalPages = Math.ceil(totalRecords / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
   const paginatedLogs = processedLogs.slice(
     startIndex,
     endIndex,
   );
-  const totalRecords = processedLogs.length;
 
   // Page jump handler
   const handlePageJump = () => {
@@ -377,7 +395,7 @@ export default function AdminRawDatabase() {
                 <Receipt className="w-4 h-4" />
                 Receipt
               </button>
-              {/* Removed Config button */}
+              {/* Removed Config and Waiter buttons - Waiter is now combined with Employee */}
             </div>
           </div>
 
@@ -417,6 +435,26 @@ export default function AdminRawDatabase() {
             </span>
             <div className="flex gap-2">
               <button
+                onClick={() => handleQuickFilter("yesterday")}
+                className={`px-4 py-2 rounded-lg transition-colors font-['Poppins',sans-serif] text-sm ${
+                  activeQuickFilter === "yesterday"
+                    ? "bg-purple-600 text-white"
+                    : "bg-[rgba(126,42,126,0.46)] hover:bg-purple-600 text-white"
+                }`}
+              >
+                Yesterday
+              </button>
+              <button
+                onClick={() => handleQuickFilter("today")}
+                className={`px-4 py-2 rounded-lg transition-colors font-['Poppins',sans-serif] text-sm ${
+                  activeQuickFilter === "today"
+                    ? "bg-purple-600 text-white"
+                    : "bg-[rgba(126,42,126,0.46)] hover:bg-purple-600 text-white"
+                }`}
+              >
+                Today
+              </button>
+              <button
                 onClick={() => handleQuickFilter("week")}
                 className={`px-4 py-2 rounded-lg transition-colors font-['Poppins',sans-serif] text-sm ${
                   activeQuickFilter === "week"
@@ -435,16 +473,6 @@ export default function AdminRawDatabase() {
                 }`}
               >
                 This Month
-              </button>
-              <button
-                onClick={() => handleQuickFilter("year")}
-                className={`px-4 py-2 rounded-lg transition-colors font-['Poppins',sans-serif] text-sm ${
-                  activeQuickFilter === "year"
-                    ? "bg-purple-600 text-white"
-                    : "bg-[rgba(126,42,126,0.46)] hover:bg-purple-600 text-white"
-                }`}
-              >
-                This Year
               </button>
               {activeQuickFilter && (
                 <button
@@ -578,7 +606,7 @@ export default function AdminRawDatabase() {
                 >
                   <option value="date">Sort by: Date</option>
                   <option value="time">
-                    Sort by: Cooking Time
+                    Sort by: Time Taken
                   </option>
                   <option value="efficiency">
                     Sort by: Efficiency
@@ -652,7 +680,7 @@ export default function AdminRawDatabase() {
                 </svg>
               </span>
             </span>
-            Employee Performance Records
+            All Employee Activity Records
           </h3>
         )}
 
@@ -668,9 +696,11 @@ export default function AdminRawDatabase() {
                 </svg>
               </span>
             </span>
-            Menu Item Performance Records
+            Menu Item Trends & Analytics
           </h3>
         )}
+
+        {/* Removed Waiter section heading - now combined with Employee */}
 
         {/* Data Table with Integrated Summary */}
         <div className="bg-[rgba(60,4,77,0.76)] rounded-lg p-6">
@@ -689,7 +719,7 @@ export default function AdminRawDatabase() {
               <span className="text-white font-medium">
                 {totalRecords}
               </span>{" "}
-              cooking records
+              {activeCategory === "menu" ? "menu items" : activeCategory === "receipt" ? "orders" : "employee activity records"}
               <span className="text-white/60 text-sm ml-2 text-[15px]">
                 (
                 {showRealDataOnly
@@ -851,293 +881,107 @@ export default function AdminRawDatabase() {
             </div>
           ) : activeCategory === "employee" ? (
             // Employee Focused View
-            <>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-white/20">
-                      <th className="text-left text-white font-['Poppins',sans-serif] pb-3 px-2">
-                        #
-                      </th>
-                      <th className="text-left text-white font-['Poppins',sans-serif] pb-3 px-2">
-                        Cook Name
-                      </th>
-                      <th className="text-left text-white font-['Poppins',sans-serif] pb-3 px-2">
-                        Department
-                      </th>
-                      <th className="text-left text-white font-['Poppins',sans-serif] pb-3 px-2">
-                        Date & Time
-                      </th>
-                      <th className="text-left text-white font-['Poppins',sans-serif] pb-3 px-2">
-                        Menu Item
-                      </th>
-                      <th className="text-left text-white font-['Poppins',sans-serif] pb-3 px-2">
-                        Cooking Time
-                      </th>
-                      <th className="text-left text-white font-['Poppins',sans-serif] pb-3 px-2">
-                        Efficiency
-                      </th>
-                      <th className="text-left text-white font-['Poppins',sans-serif] pb-3 px-2">
-                        Performance
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {paginatedLogs.map((log, index) => {
-                      const date = new Date(log.timestamp);
-                      const dateStr =
-                        date.toLocaleDateString("id-ID");
-                      const timeStr = date.toLocaleTimeString(
-                        "id-ID",
-                        { hour: "2-digit", minute: "2-digit" },
-                      );
-
-                      return (
-                        <tr
-                          key={log.id}
-                          className="border-b border-white/10 hover:bg-white/5"
-                        >
-                          <td className="py-3 px-2 text-white/80 font-['Poppins',sans-serif]">
-                            {startIndex + index + 1}
-                          </td>
-                          <td className="py-3 px-2 text-white font-['Poppins',sans-serif] font-medium">
-                            {log.cookName}
-                          </td>
-                          <td className="py-3 px-2">
-                            <span className="inline-block px-2 py-1 rounded text-xs font-['Poppins',sans-serif] bg-purple-600/40 text-white capitalize">
-                              {log.department}
-                            </span>
-                          </td>
-                          <td className="py-3 px-2 text-white/80 font-['Poppins',sans-serif] text-sm">
-                            {dateStr}
-                            <br />
-                            <span className="text-white/60">
-                              {timeStr}
-                            </span>
-                          </td>
-                          <td className="py-3 px-2 text-white/80 font-['Poppins',sans-serif]">
-                            {log.menuName}
-                          </td>
-                          <td className="py-3 px-2 text-white/80 font-['Poppins',sans-serif]">
-                            {log.timeMinutes}m {log.timeSeconds}s
-                            <span className="text-white/40 text-xs ml-1">
-                              ({log.totalSeconds}s)
-                            </span>
-                          </td>
-                          <td className="py-3 px-2">
-                            <span
-                              className={`inline-block px-2 py-1 rounded text-xs font-['Poppins',sans-serif] text-white ${getEfficiencyColor(log.efficiency)}`}
-                            >
-                              {log.efficiency}
-                            </span>
-                          </td>
-                          <td className="py-3 px-2">
-                            <div className="flex items-center gap-2">
-                              <div className="flex-1 bg-white/10 rounded-full h-2 max-w-[80px]">
-                                <div
-                                  className={`h-2 rounded-full ${getEfficiencyColor(log.efficiency)}`}
-                                  style={{
-                                    width: `${Math.min(log.percentageOfAverage * 100, 100)}%`,
-                                  }}
-                                />
-                              </div>
-                              <span className="text-white/80 font-['Poppins',sans-serif] text-sm">
-                                {(
-                                  log.percentageOfAverage * 100
-                                ).toFixed(0)}
-                                %
-                              </span>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </>
+            <AdminRawDatabaseViewEmployee
+              paginatedLogs={paginatedLogs}
+              startIndex={startIndex}
+              getEfficiencyColor={getEfficiencyColor}
+              onNavigate={navigate}
+            />
           ) : activeCategory === "menu" ? (
             // Menu Focused View
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-white/20">
-                    <th className="text-left text-white font-['Poppins',sans-serif] pb-3 px-2">
-                      #
-                    </th>
-                    <th className="text-left text-white font-['Poppins',sans-serif] pb-3 px-2">
-                      Menu Item
-                    </th>
-                    <th className="text-left text-white font-['Poppins',sans-serif] pb-3 px-2">
-                      Department
-                    </th>
-                    <th className="text-left text-white font-['Poppins',sans-serif] pb-3 px-2">
-                      Date & Time
-                    </th>
-                    <th className="text-left text-white font-['Poppins',sans-serif] pb-3 px-2">
-                      Prepared By
-                    </th>
-                    <th className="text-left text-white font-['Poppins',sans-serif] pb-3 px-2">
-                      Prep Time
-                    </th>
-                    <th className="text-left text-white font-['Poppins',sans-serif] pb-3 px-2">
-                      Speed Rating
-                    </th>
-                    <th className="text-left text-white font-['Poppins',sans-serif] pb-3 px-2">
-                      vs Standard
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {paginatedLogs.map((log, index) => {
-                    const date = new Date(log.timestamp);
-                    const dateStr =
-                      date.toLocaleDateString("id-ID");
-                    const timeStr = date.toLocaleTimeString(
-                      "id-ID",
-                      { hour: "2-digit", minute: "2-digit" },
-                    );
+            <AdminRawDatabaseViewMenu
+              processedLogs={processedLogs}
+              currentPage={currentPage}
+              itemsPerPage={itemsPerPage}
+              onNavigate={navigate}
+            />
+          ) : activeCategory === "menu_OLD" ? (
+            // Menu Focused View - Grouped by Menu Item with Trends - OLD
+            (() => {
+              // Group logs by menu item
+              const menuGroups = processedLogs.reduce((acc, log) => {
+                if (!acc[log.menuName]) {
+                  acc[log.menuName] = {
+                    menuName: log.menuName,
+                    department: log.department,
+                    logs: []
+                  };
+                }
+                acc[log.menuName].logs.push(log);
+                return acc;
+              }, {} as Record<string, { menuName: string; department: string; logs: typeof processedLogs }>);
 
-                    return (
-                      <tr
-                        key={log.id}
-                        className="border-b border-white/10 hover:bg-white/5"
-                      >
-                        <td className="py-3 px-2 text-white/80 font-['Poppins',sans-serif]">
-                          {startIndex + index + 1}
-                        </td>
-                        <td className="py-3 px-2 text-white font-['Poppins',sans-serif] font-medium">
-                          {log.menuName}
-                        </td>
-                        <td className="py-3 px-2">
-                          <span className="inline-block px-2 py-1 rounded text-xs font-['Poppins',sans-serif] bg-purple-600/40 text-white capitalize">
-                            {log.department}
-                          </span>
-                        </td>
-                        <td className="py-3 px-2 text-white/80 font-['Poppins',sans-serif] text-sm">
-                          {dateStr}
-                          <br />
-                          <span className="text-white/60">
-                            {timeStr}
-                          </span>
-                        </td>
-                        <td className="py-3 px-2 text-white/80 font-['Poppins',sans-serif]">
-                          {log.cookName}
-                        </td>
-                        <td className="py-3 px-2 text-white/80 font-['Poppins',sans-serif]">
-                          <div className="flex flex-col">
-                            <span className="font-medium">
-                              {log.timeMinutes}m{" "}
-                              {log.timeSeconds}s
-                            </span>
-                            <span className="text-white/40 text-xs">
-                              ({log.totalSeconds} seconds)
-                            </span>
-                          </div>
-                        </td>
-                        <td className="py-3 px-2">
-                          <span
-                            className={`inline-block px-2 py-1 rounded text-xs font-['Poppins',sans-serif] text-white ${getEfficiencyColor(log.efficiency)}`}
-                          >
-                            {log.efficiency}
-                          </span>
-                        </td>
-                        <td className="py-3 px-2">
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={`font-['Poppins',sans-serif] text-sm font-medium ${
-                                log.percentageOfAverage < 0.8
-                                  ? "text-green-400"
-                                  : log.percentageOfAverage <
-                                      1.0
-                                    ? "text-blue-400"
-                                    : log.percentageOfAverage <
-                                        1.3
-                                      ? "text-orange-400"
-                                      : "text-red-400"
-                              }`}
-                            >
-                              {(
-                                log.percentageOfAverage * 100
-                              ).toFixed(0)}
-                              %
-                            </span>
-                            <span className="text-white/60 text-xs">
-                              {log.percentageOfAverage < 1.0
-                                ? "↓ faster"
-                                : "↑ slower"}
-                            </span>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          ) : activeCategory === "receipt" ? (
-            // Receipt View
-            <>
-              {allOrders.length === 0 ? (
-                <div className="text-center py-12">
-                  <p className="text-white/60 font-['Poppins',sans-serif] text-lg">
-                    No orders found
-                  </p>
-                </div>
-              ) : receiptViewMode === "card" ? (
-                // Card View
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {allOrders.map((order) => (
-                    <div key={order.orderId} className="bg-[#541168] border border-purple-400/20 rounded-lg p-4">
-                      {/* Order Header */}
-                      <div className="border-b border-white/10 pb-3 mb-3">
-                        <div className="flex items-center justify-between mb-2">
-                          <h3 className="text-white font-['Poppins',sans-serif]">
-                            {order.orderId}
-                          </h3>
-                          <span className="text-xs text-white/60 font-['Poppins',sans-serif] capitalize">
-                            {order.items[0]?.name ? 
-                              allDepartments.find(d => d.orders.includes(order))?.department 
-                              : 'Unknown'}
-                          </span>
-                        </div>
-                        {order.assignedWaiter && (
-                          <p className="text-white/80 text-sm font-['Poppins',sans-serif]">
-                            Waiter: {order.assignedWaiter}
-                          </p>
-                        )}
-                        {order.deliveredAt && (
-                          <p className="text-green-400 text-xs font-['Poppins',sans-serif] mt-1">
-                            Delivered: {order.deliveredAt}
-                          </p>
-                        )}
-                      </div>
+              // Calculate time period averages for each menu item
+              const menuStats = Object.values(menuGroups).map(group => {
+                const now = new Date();
+                const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                const yesterdayStart = new Date(todayStart);
+                yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+                const weekStart = new Date(todayStart);
+                weekStart.setDate(weekStart.getDate() - now.getDay());
+                const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-                      {/* Items List */}
-                      <div className="space-y-2">
-                        {order.items.map((item, idx) => (
-                          <div key={idx} className="flex items-center justify-between">
-                            <span className="text-white text-sm font-['Poppins',sans-serif]">
-                              {item.name}
-                            </span>
-                            <span className={`text-xs px-2 py-0.5 rounded font-['Poppins',sans-serif] ${
-                              item.status === 'finished' 
-                                ? 'bg-green-400/20 text-green-400'
-                                : item.status === 'on-their-way'
-                                ? 'bg-blue-400/20 text-blue-400'
-                                : 'bg-white/10 text-white/60'
-                            }`}>
-                              {item.status === 'finished' ? 'Done' : 
-                               item.status === 'on-their-way' ? 'Cooking' : 'Pending'}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                // Table View
+                const todayLogs = group.logs.filter(l => new Date(l.timestamp) >= todayStart);
+                const yesterdayLogs = group.logs.filter(l => {
+                  const d = new Date(l.timestamp);
+                  return d >= yesterdayStart && d < todayStart;
+                });
+                const weekLogs = group.logs.filter(l => new Date(l.timestamp) >= weekStart);
+                const monthLogs = group.logs.filter(l => new Date(l.timestamp) >= monthStart);
+                const allTimeLogs = group.logs;
+
+                const calcAvg = (logs: typeof processedLogs) => {
+                  if (logs.length === 0) return null;
+                  const sum = logs.reduce((s, l) => s + l.totalSeconds, 0);
+                  return sum / logs.length;
+                };
+
+                // Get standard time from first log's average
+                const standard = group.logs[0]?.averageSeconds || 0;
+
+                return {
+                  menuName: group.menuName,
+                  department: group.department,
+                  totalCooks: allTimeLogs.length,
+                  standard,
+                  avgAllTime: calcAvg(allTimeLogs),
+                  avgMonth: calcAvg(monthLogs),
+                  avgWeek: calcAvg(weekLogs),
+                  avgYesterday: calcAvg(yesterdayLogs),
+                  avgToday: calcAvg(todayLogs),
+                  countToday: todayLogs.length,
+                  countYesterday: yesterdayLogs.length,
+                  countWeek: weekLogs.length,
+                  countMonth: monthLogs.length,
+                };
+              });
+
+              // Sort by menu name
+              menuStats.sort((a, b) => a.menuName.localeCompare(b.menuName));
+
+              // Pagination for menu stats
+              const menuStartIndex = (currentPage - 1) * itemsPerPage;
+              const menuEndIndex = menuStartIndex + itemsPerPage;
+              const paginatedMenuStats = menuStats.slice(menuStartIndex, menuEndIndex);
+
+              const formatTime = (seconds: number | null) => {
+                if (seconds === null) return '-';
+                const mins = Math.floor(seconds / 60);
+                const secs = Math.floor(seconds % 60);
+                return `${mins}m ${secs}s`;
+              };
+
+              const getTrendColor = (avg: number | null, baseline: number | null) => {
+                if (avg === null) return 'text-white/40';
+                if (baseline === null) return 'text-white';
+                const diff = Math.abs(avg - baseline);
+                // Consider "same" if within 5 seconds difference
+                if (diff <= 5) return 'text-white';
+                // Green if faster (lower time), red if slower (higher time)
+                return avg < baseline ? 'text-green-400' : 'text-red-400';
+              };
+
+              return (
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
@@ -1146,77 +990,117 @@ export default function AdminRawDatabase() {
                           #
                         </th>
                         <th className="text-left text-white font-['Poppins',sans-serif] pb-3 px-2">
-                          Order ID
+                          Menu Item
                         </th>
                         <th className="text-left text-white font-['Poppins',sans-serif] pb-3 px-2">
                           Department
                         </th>
                         <th className="text-left text-white font-['Poppins',sans-serif] pb-3 px-2">
-                          Waiter
+                          Standard
                         </th>
                         <th className="text-left text-white font-['Poppins',sans-serif] pb-3 px-2">
-                          Items
+                          <div className="flex flex-col">
+                            <span>Avg All Time</span>
+                            <span className="text-white/60 text-xs font-normal">Total Cooks</span>
+                          </div>
                         </th>
                         <th className="text-left text-white font-['Poppins',sans-serif] pb-3 px-2">
-                          Status
+                          <div className="flex flex-col">
+                            <span>Avg This Month</span>
+                            <span className="text-white/60 text-xs font-normal">Count</span>
+                          </div>
                         </th>
                         <th className="text-left text-white font-['Poppins',sans-serif] pb-3 px-2">
-                          Delivered
+                          <div className="flex flex-col">
+                            <span>Avg This Week</span>
+                            <span className="text-white/60 text-xs font-normal">Count</span>
+                          </div>
+                        </th>
+                        <th className="text-left text-white font-['Poppins',sans-serif] pb-3 px-2">
+                          <div className="flex flex-col">
+                            <span>Avg Yesterday</span>
+                            <span className="text-white/60 text-xs font-normal">Count</span>
+                          </div>
+                        </th>
+                        <th className="text-left text-white font-['Poppins',sans-serif] pb-3 px-2">
+                          <div className="flex flex-col">
+                            <span>Avg Today</span>
+                            <span className="text-white/60 text-xs font-normal">Count</span>
+                          </div>
                         </th>
                       </tr>
                     </thead>
                     <tbody>
-                      {allOrders.map((order, index) => {
-                        const department = allDepartments.find(d => d.orders.includes(order))?.department || 'Unknown';
-                        const allFinished = order.items.every(item => item.status === 'finished');
-                        const anyInProgress = order.items.some(item => item.status === 'on-their-way');
-                        const orderStatus = allFinished ? 'Completed' : anyInProgress ? 'In Progress' : 'Pending';
-                        
+                      {paginatedMenuStats.map((stat, index) => {
                         return (
                           <tr
-                            key={order.orderId}
-                            className="border-b border-white/10 hover:bg-white/5"
+                            key={stat.menuName}
+                            onClick={() => navigate(`/menu-management?item=${encodeURIComponent(stat.menuName)}`)}
+                            className="border-b border-white/10 hover:bg-purple-600/20 cursor-pointer transition-colors"
                           >
                             <td className="py-3 px-2 text-white/80 font-['Poppins',sans-serif]">
-                              {index + 1}
+                              {menuStartIndex + index + 1}
                             </td>
                             <td className="py-3 px-2 text-white font-['Poppins',sans-serif] font-medium">
-                              {order.orderId}
+                              {stat.menuName}
                             </td>
                             <td className="py-3 px-2">
                               <span className="inline-block px-2 py-1 rounded text-xs font-['Poppins',sans-serif] bg-purple-600/40 text-white capitalize">
-                                {department}
+                                {stat.department}
                               </span>
                             </td>
                             <td className="py-3 px-2 text-white/80 font-['Poppins',sans-serif]">
-                              {order.assignedWaiter || '-'}
+                              <span className="font-medium">{formatTime(stat.standard)}</span>
                             </td>
-                            <td className="py-3 px-2">
-                              <div className="flex flex-col gap-1">
-                                {order.items.map((item, idx) => (
-                                  <span key={idx} className="text-white/80 text-sm font-['Poppins',sans-serif]">
-                                    {item.name}
-                                  </span>
-                                ))}
+                            <td className="py-3 px-2 font-['Poppins',sans-serif]">
+                              <div className="flex flex-col">
+                                <span className="font-medium text-white">
+                                  {formatTime(stat.avgAllTime)}
+                                </span>
+                                <span className="text-white/60 text-xs">
+                                  {stat.totalCooks} cooks
+                                </span>
                               </div>
                             </td>
-                            <td className="py-3 px-2">
-                              <span className={`inline-block px-2 py-1 rounded text-xs font-['Poppins',sans-serif] ${
-                                orderStatus === 'Completed' 
-                                  ? 'bg-green-400/20 text-green-400'
-                                  : orderStatus === 'In Progress'
-                                  ? 'bg-blue-400/20 text-blue-400'
-                                  : 'bg-white/10 text-white/60'
-                              }`}>
-                                {orderStatus}
-                              </span>
+                            <td className="py-3 px-2 font-['Poppins',sans-serif]">
+                              <div className="flex flex-col">
+                                <span className={`font-medium ${getTrendColor(stat.avgMonth, stat.avgAllTime)}`}>
+                                  {formatTime(stat.avgMonth)}
+                                </span>
+                                <span className="text-white/60 text-xs">
+                                  {stat.countMonth} cooks
+                                </span>
+                              </div>
                             </td>
-                            <td className="py-3 px-2 text-white/80 font-['Poppins',sans-serif] text-sm">
-                              {order.deliveredAt ? (
-                                <span className="text-green-400">{order.deliveredAt}</span>
-                              ) : (
-                                <span className="text-white/40">-</span>
-                              )}
+                            <td className="py-3 px-2 font-['Poppins',sans-serif]">
+                              <div className="flex flex-col">
+                                <span className={`font-medium ${getTrendColor(stat.avgWeek, stat.avgAllTime)}`}>
+                                  {formatTime(stat.avgWeek)}
+                                </span>
+                                <span className="text-white/60 text-xs">
+                                  {stat.countWeek} cooks
+                                </span>
+                              </div>
+                            </td>
+                            <td className="py-3 px-2 font-['Poppins',sans-serif]">
+                              <div className="flex flex-col">
+                                <span className={`font-medium ${getTrendColor(stat.avgYesterday, stat.avgAllTime)}`}>
+                                  {formatTime(stat.avgYesterday)}
+                                </span>
+                                <span className="text-white/60 text-xs">
+                                  {stat.countYesterday} cooks
+                                </span>
+                              </div>
+                            </td>
+                            <td className="py-3 px-2 font-['Poppins',sans-serif]">
+                              <div className="flex flex-col">
+                                <span className={`font-medium ${getTrendColor(stat.avgToday, stat.avgAllTime)}`}>
+                                  {formatTime(stat.avgToday)}
+                                </span>
+                                <span className="text-white/60 text-xs">
+                                  {stat.countToday} cooks
+                                </span>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -1224,119 +1108,18 @@ export default function AdminRawDatabase() {
                     </tbody>
                   </table>
                 </div>
-              )}
-            </>
+              );
+            })()
+          ) : activeCategory === "receipt" ? (
+            // Receipt View
+            <AdminRawDatabaseViewReceipt
+              allDepartments={allDepartments}
+              allOrders={allOrders}
+              receiptViewMode={receiptViewMode}
+            />
           ) : (
             // Config Focused View
-            <div className="overflow-x-auto">
-              <h3 className="text-white font-['Poppins',sans-serif] mb-4 flex items-center gap-2">
-                <BarChart3 className="w-6 h-6" />
-                Saved Configurations
-              </h3>
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-white/20">
-                    <th className="text-left text-white font-['Poppins',sans-serif] pb-3 px-2">
-                      #
-                    </th>
-                    <th className="text-left text-white font-['Poppins',sans-serif] pb-3 px-2">
-                      Config Name
-                    </th>
-                    <th className="text-left text-white font-['Poppins',sans-serif] pb-3 px-2">
-                      Department
-                    </th>
-                    <th className="text-left text-white font-['Poppins',sans-serif] pb-3 px-2">
-                      Data Source
-                    </th>
-                    <th className="text-left text-white font-['Poppins',sans-serif] pb-3 px-2">
-                      Standard
-                    </th>
-                    <th className="text-left text-white font-['Poppins',sans-serif] pb-3 px-2">
-                      Very Fast
-                    </th>
-                    <th className="text-left text-white font-['Poppins',sans-serif] pb-3 px-2">
-                      Fast
-                    </th>
-                    <th className="text-left text-white font-['Poppins',sans-serif] pb-3 px-2">
-                      Slow
-                    </th>
-                    <th className="text-left text-white font-['Poppins',sans-serif] pb-3 px-2">
-                      Extremely Slow
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {getAllSavedConfigs().length === 0 ? (
-                    <tr>
-                      <td colSpan={9} className="py-8 text-center text-white/60 font-['Poppins',sans-serif]">
-                        No custom configurations saved yet. Configure items in Menu Management.
-                      </td>
-                    </tr>
-                  ) : (
-                    getAllSavedConfigs().map((config, index) => {
-                      const standardPreset = config.presets.find(p => p.name === 'standard');
-                      const veryFastPreset = config.presets.find(p => p.name === 'very-fast');
-                      const fastPreset = config.presets.find(p => p.name === 'fast');
-                      const slowPreset = config.presets.find(p => p.name === 'slow');
-                      const extremelySlowPreset = config.presets.find(p => p.name === 'extremely-slow');
-
-                      return (
-                        <tr
-                          key={config.name}
-                          className="border-b border-white/10 hover:bg-white/5"
-                        >
-                          <td className="py-3 px-2 text-white/80 font-['Poppins',sans-serif]">
-                            {index + 1}
-                          </td>
-                          <td className="py-3 px-2 text-white font-['Poppins',sans-serif] font-medium">
-                            {config.name}
-                          </td>
-                          <td className="py-3 px-2">
-                            <span className="inline-block px-2 py-1 rounded text-xs font-['Poppins',sans-serif] bg-purple-600/40 text-white capitalize">
-                              {config.department}
-                            </span>
-                          </td>
-                          <td className="py-3 px-2 text-sm font-['Poppins',sans-serif]">
-                            {config.dataSource ? (
-                              <div className="flex items-center gap-1">
-                                <BarChart3 className="w-3.5 h-3.5 text-green-400" />
-                                <span className="text-white/80">
-                                  {config.dataSource.sampleCount} log{config.dataSource.sampleCount > 1 ? 's' : ''}
-                                </span>
-                              </div>
-                            ) : (
-                              <div className="flex items-center gap-1">
-                                <AlertTriangle className="w-3.5 h-3.5 text-yellow-400" />
-                                <span className="text-yellow-400">Default</span>
-                              </div>
-                            )}
-                          </td>
-                          <td className="py-3 px-2 text-white/80 font-['Poppins',sans-serif]">
-                            {standardPreset && (
-                              <span className="font-medium">
-                                {standardPreset.value}{standardPreset.unit}
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-3 px-2 text-white/80 font-['Poppins',sans-serif] text-sm">
-                            {veryFastPreset && `${veryFastPreset.value}${veryFastPreset.unit}`}
-                          </td>
-                          <td className="py-3 px-2 text-white/80 font-['Poppins',sans-serif] text-sm">
-                            {fastPreset && `${fastPreset.value}${fastPreset.unit}`}
-                          </td>
-                          <td className="py-3 px-2 text-white/80 font-['Poppins',sans-serif] text-sm">
-                            {slowPreset && `${slowPreset.value}${slowPreset.unit}`}
-                          </td>
-                          <td className="py-3 px-2 text-white/80 font-['Poppins',sans-serif] text-sm">
-                            {extremelySlowPreset && `${extremelySlowPreset.value}${extremelySlowPreset.unit}`}
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
+            <AdminRawDatabaseViewConfig savedConfigs={getAllSavedConfigs()} />
           )}
         </div>
 

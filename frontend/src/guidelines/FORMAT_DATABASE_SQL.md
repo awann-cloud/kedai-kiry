@@ -1,27 +1,44 @@
 # 🗄️ Format Database SQL - Sistem Order Management & Analytics
 
+**Terakhir Diupdate:** 29 November 2025  
+**Versi:** 3.0 (Staff Management + Per-Item Waiter Assignment)
+
 ## 📋 Daftar Isi
 
-***DOKUMENTASI DATABASE***
-File ini berisi spesifikasi lengkap struktur database SQL untuk sistem kitchen order management.
+1. [Overview](#overview)
+2. [Tabel menu_items](#tabel-menu_items)
+3. [Tabel log_memasak](#tabel-log_memasak)
+4. [Tabel staff](#tabel-staff)
+5. [Tabel orders](#tabel-orders)
+6. [Tabel order_items](#tabel-order_items)
+7. [Tabel waiter_assignments](#tabel-waiter_assignments)
+8. [Tabel schedules](#tabel-schedules)
+9. [Relationships & Constraints](#relationships--constraints)
+10. [Sample Queries](#sample-queries)
 
 ---
 
 ## 🎯 Overview
 
 ### Tabel Utama:
-1. **menu_items** - Data menu dan waktu memasak
-2. **cooking_logs** - Log histori memasak
-3. **staff** - Data karyawan
-4. **orders** - Data pesanan
+
+1. **menu_items** - Data menu dan waktu memasak preset
+2. **log_memasak** - Log histori memasak (cooking analytics)
+3. **staff** - Data karyawan dengan auto-increment ID
+4. **orders** - Data pesanan (receipt level)
 5. **order_items** - Detail item dalam pesanan
-6. **schedules** - Jadwal shift karyawan
+6. **waiter_assignments** - Assignment waiter per-item
+7. **schedules** - Jadwal shift karyawan
+
+### Database Engine:
+
+- **Engine:** InnoDB (support foreign keys & transactions)
+- **Charset:** utf8mb4
+- **Collation:** utf8mb4_unicode_ci
 
 ---
 
 ## 📊 1. Tabel: menu_items
-
-***STRUKTUR UTAMA***
 
 ### Definisi Tabel:
 
@@ -32,13 +49,13 @@ CREATE TABLE menu_items (
     
     -- Informasi Menu
     Nama_Menu VARCHAR(100) NOT NULL,
-    Kategori VARCHAR(50) NOT NULL CHECK (Kategori IN ('Minuman', 'Makanan', 'Snack')),
+    Kategori ENUM('Minuman', 'Makanan', 'Snack') NOT NULL,
     Harga DECIMAL(10,2) NOT NULL CHECK (Harga >= 0),
     
-    -- Waktu Memasak (dalam detik)
-    Waktu_Cepat INT NOT NULL CHECK (Waktu_Cepat > 0) COMMENT 'Preset: Very Fast',
-    Waktu_Normal INT NOT NULL CHECK (Waktu_Normal > 0) COMMENT 'Preset: Standard',
-    Waktu_Lama INT NOT NULL CHECK (Waktu_Lama > 0) COMMENT 'Preset: Extremely Slow',
+    -- Waktu Memasak Preset (dalam detik)
+    Waktu_Cepat INT NOT NULL CHECK (Waktu_Cepat > 0) COMMENT 'Preset: Very Fast (≤120s)',
+    Waktu_Normal INT NOT NULL CHECK (Waktu_Normal > 0) COMMENT 'Preset: Normal (≤360s)',
+    Waktu_Lama INT NOT NULL CHECK (Waktu_Lama > 0) COMMENT 'Preset: Very Slow (>600s)',
     
     -- Metadata
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -60,191 +77,98 @@ CREATE TABLE menu_items (
 - **Contoh**: 
   - `MN001` - Thai Tea + Nusantara
   - `MN002` - Air Hangat / Es Kosong
-  - `MN003` - Air Mineral
-  - `MN004` - Mineral dus
+  - `MN003` - Nasi Goreng Special
+  - `MN100` - Sate Ayam
 - **Constraint**: UNIQUE, NOT NULL
-- **Catatan**: Auto-increment manual (bukan AUTO_INCREMENT)
+- **Auto-increment**: Manual (bukan AUTO_INCREMENT)
 
 ***Nama_Menu***
 - **Tipe**: `VARCHAR(100)`
-- **Contoh**: 
-  - "Thai Tea + Nusantara"
-  - "Air Hangat / Es Kosong"
-  - "Nasi Goreng Special"
+- **Contoh**: "Thai Tea + Nusantara", "Nasi Goreng Special"
 - **Constraint**: NOT NULL
-- **Catatan**: Case-sensitive, bisa mengandung special characters
+- **Case**: Sensitive
 
 ***Kategori***
-- **Tipe**: `VARCHAR(50)`
-- **Nilai Valid**: `"Minuman"`, `"Makanan"`, `"Snack"`
+- **Tipe**: `ENUM('Minuman', 'Makanan', 'Snack')`
 - **Mapping ke Department**:
-  ```typescript
-  // Frontend mapping
-  "Minuman" → department: "bar"
-  "Makanan" → department: "kitchen"
-  "Snack"   → department: "snack"
   ```
-- **Constraint**: CHECK constraint untuk validasi
+  "Minuman" → Bar Department
+  "Makanan" → Kitchen Department
+  "Snack"   → Snack Department
+  ```
 
 ***Harga***
 - **Tipe**: `DECIMAL(10,2)`
-- **Contoh**: 
-  - `17000.00` - Thai Tea
-  - `2000.00` - Air Hangat
-  - `8000.00` - Air Mineral
-  - `5000.00` - Mineral dus
 - **Unit**: Rupiah (IDR)
 - **Range**: 0 - 99,999,999.99
-- **Constraint**: CHECK >= 0
+- **Contoh**: 17000.00, 25000.00, 5000.00
 
-### Kolom Waktu Memasak:
-
-***Waktu_Cepat***
+***Waktu_Cepat*** (Very Fast Preset)
 - **Tipe**: `INT`
 - **Unit**: Detik
-- **Mapping**: Preset "Very Fast" di frontend
-- **Contoh berdasarkan screenshot**:
-  - `7` detik (Thai Tea)
-  - `5` detik (Air Hangat)
-  - `5` detik (Air Mineral)
-  - `5` detik (Mineral dus)
-- **Constraint**: > 0
-- **Catatan**: Waktu tercepat yang mungkin
+- **Range**: ≤ 120 detik (2 menit)
+- **Contoh**: 60, 90, 120
 
-***Waktu_Normal***
+***Waktu_Normal*** (Normal Preset)
 - **Tipe**: `INT`
 - **Unit**: Detik
-- **Mapping**: Preset "Standard" di frontend
-- **Contoh berdasarkan screenshot**:
-  - `8-17` → Store as `12` (rata-rata atau median)
-  - `6-15` → Store as `10`
-  - Atau gunakan nilai tengah range
-- **Constraint**: >= Waktu_Cepat
-- **Catatan**: Waktu standar yang diharapkan
+- **Range**: 121-360 detik (2-6 menit)
+- **Contoh**: 180, 240, 300
 
-***Waktu_Lama***
+***Waktu_Lama*** (Very Slow Preset)
 - **Tipe**: `INT`
 - **Unit**: Detik
-- **Mapping**: Preset "Extremely Slow" di frontend
-- **Contoh berdasarkan screenshot**:
-  - `17` detik
-  - `15` detik
-  - `15` detik
-- **Constraint**: >= Waktu_Normal
-- **Catatan**: Batas waktu maksimal yang dapat diterima
-
-### Metadata Columns:
-
-***created_at***
-- **Tipe**: `TIMESTAMP`
-- **Default**: `CURRENT_TIMESTAMP`
-- **Catatan**: Auto-fill saat insert
-
-***updated_at***
-- **Tipe**: `TIMESTAMP`
-- **Default**: `CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`
-- **Catatan**: Auto-update saat ada perubahan
-
-***is_active***
-- **Tipe**: `BOOLEAN` (TINYINT(1))
-- **Default**: `TRUE`
-- **Nilai**: `0` (inactive), `1` (active)
-- **Catatan**: Soft delete, menu tidak benar-benar dihapus
+- **Range**: > 600 detik (> 10 menit)
+- **Contoh**: 600, 900, 1200
 
 ---
 
-### Contoh Data (dari screenshot):
-
-```sql
-INSERT INTO menu_items (ID_Menu, Nama_Menu, Kategori, Harga, Waktu_Cepat, Waktu_Normal, Waktu_Lama) VALUES
-('MN001', 'Thai Tea + Nusantara', 'Minuman', 17000.00, 7, 12, 17),
-('MN002', 'Air Hangat / Es Kosong', 'Minuman', 2000.00, 5, 10, 15),
-('MN003', 'Air Mineral', 'Minuman', 8000.00, 5, 10, 15),
-('MN004', 'Mineral dus', 'Minuman', 5000.00, 5, 10, 15);
-```
-
-### Interpretasi Range dari Screenshot:
-
-***Kolom "Waktu_Normal" di screenshot menunjukkan range (e.g., "8-17")***
-
-**Opsi 1: Store sebagai 2 kolom**
-```sql
-ALTER TABLE menu_items 
-ADD COLUMN Waktu_Normal_Min INT,
-ADD COLUMN Waktu_Normal_Max INT;
-```
-
-**Opsi 2: Store nilai tengah (RECOMMENDED)**
-```sql
--- Untuk "8-17", store 12 atau 13
--- Lebih simple untuk analytics
-UPDATE menu_items 
-SET Waktu_Normal = (8 + 17) / 2 
-WHERE ID_Menu = 'MN001';
-```
-
-**Opsi 3: Store sebagai JSON (MySQL 5.7+)**
-```sql
-ALTER TABLE menu_items 
-ADD COLUMN waktu_details JSON;
-
--- Store: {"cepat": 7, "normal": {"min": 8, "max": 17}, "lama": 17}
-```
-
----
-
-## 📝 2. Tabel: cooking_logs
-
-***LOG HISTORI MEMASAK***
+## 📈 2. Tabel: log_memasak
 
 ### Definisi Tabel:
 
 ```sql
-CREATE TABLE cooking_logs (
+CREATE TABLE log_memasak (
     -- Primary Key
     log_id BIGINT AUTO_INCREMENT PRIMARY KEY,
     
     -- Foreign Keys
     ID_Menu VARCHAR(10) NOT NULL,
-    staff_id INT NOT NULL,
-    order_item_id BIGINT,
+    staff_id VARCHAR(10) NOT NULL,
+    order_id VARCHAR(20) NOT NULL,
     
-    -- Order Info
-    order_id VARCHAR(50) NOT NULL,
-    department VARCHAR(20) NOT NULL,
+    -- Menu Info (denormalized untuk performance)
+    menu_name VARCHAR(100) NOT NULL,
+    cook_name VARCHAR(100) NOT NULL,
+    department ENUM('kitchen', 'bar', 'snack') NOT NULL,
+    
+    -- Quantity
+    quantity INT NOT NULL DEFAULT 1 CHECK (quantity > 0),
     
     -- Timing Data
-    start_time TIMESTAMP NOT NULL,
-    finish_time TIMESTAMP NOT NULL,
-    duration_seconds INT GENERATED ALWAYS AS (TIMESTAMPDIFF(SECOND, start_time, finish_time)) STORED,
+    started_time DATETIME NOT NULL COMMENT 'Waktu mulai memasak',
+    finished_time DATETIME NOT NULL COMMENT 'Waktu selesai memasak',
+    elapsed_time INT NOT NULL COMMENT 'Durasi memasak (detik)',
+    frozen_time DATETIME NOT NULL COMMENT 'Waktu save ke log',
     
-    -- Performance Metrics
-    efficiency_category VARCHAR(20),
-    efficiency_ratio DECIMAL(5,2),
-    expected_duration INT COMMENT 'Waktu_Normal dari menu_items',
+    -- Efficiency Classification
+    efficiency_level ENUM('Very Fast', 'Fast', 'Normal', 'Slow', 'Very Slow') NOT NULL,
     
     -- Metadata
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     
     -- Foreign Key Constraints
-    FOREIGN KEY (ID_Menu) REFERENCES menu_items(ID_Menu) ON DELETE RESTRICT,
-    FOREIGN KEY (staff_id) REFERENCES staff(staff_id) ON DELETE RESTRICT,
+    CONSTRAINT fk_log_menu FOREIGN KEY (ID_Menu) REFERENCES menu_items(ID_Menu) ON DELETE CASCADE,
+    CONSTRAINT fk_log_staff FOREIGN KEY (staff_id) REFERENCES staff(staff_id) ON DELETE CASCADE,
+    CONSTRAINT fk_log_order FOREIGN KEY (order_id) REFERENCES orders(order_id) ON DELETE CASCADE,
     
-    -- Indexes untuk performa query
-    INDEX idx_cook_staff (staff_id),
+    -- Indexes
+    INDEX idx_cook (staff_id),
     INDEX idx_menu (ID_Menu),
     INDEX idx_department (department),
-    INDEX idx_finish_time (finish_time),
-    INDEX idx_efficiency (efficiency_category),
-    INDEX idx_order (order_id),
-    
-    -- Composite indexes untuk analytics queries
-    INDEX idx_staff_menu (staff_id, ID_Menu),
-    INDEX idx_dept_date (department, finish_time),
-    
-    -- Constraints
-    CONSTRAINT chk_time_order CHECK (finish_time > start_time),
-    CONSTRAINT chk_dept CHECK (department IN ('kitchen', 'bar', 'snack'))
+    INDEX idx_date (finished_time),
+    INDEX idx_efficiency (efficiency_level),
+    INDEX idx_order (order_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 ```
 
@@ -253,337 +177,242 @@ CREATE TABLE cooking_logs (
 ***log_id*** (PRIMARY KEY)
 - **Tipe**: `BIGINT AUTO_INCREMENT`
 - **Range**: 1 - 9,223,372,036,854,775,807
-- **Catatan**: Auto-increment, unique untuk setiap log
+- **Auto-increment**: Database managed
 
 ***ID_Menu*** (FOREIGN KEY)
 - **Tipe**: `VARCHAR(10)`
-- **Referensi**: `menu_items.ID_Menu`
-- **Constraint**: NOT NULL, RESTRICT on delete
-- **Contoh**: `'MN001'`, `'MN002'`
+- **Reference**: menu_items.ID_Menu
+- **Cascade**: DELETE CASCADE
 
 ***staff_id*** (FOREIGN KEY)
-- **Tipe**: `INT`
-- **Referensi**: `staff.staff_id`
-- **Constraint**: NOT NULL, RESTRICT on delete
-- **Catatan**: Link ke tabel staff
+- **Tipe**: `VARCHAR(10)`
+- **Format**: Prefix-based ID (k1, b2, s3, w1)
+- **Reference**: staff.staff_id
+- **Cascade**: DELETE CASCADE
 
-***order_item_id***
-- **Tipe**: `BIGINT`
-- **Nullable**: YES
-- **Referensi**: `order_items.item_id` (jika ada tabel order_items)
-- **Catatan**: Untuk traceability ke specific order item
+***order_id*** (FOREIGN KEY)
+- **Tipe**: `VARCHAR(20)`
+- **Format**: "R" + timestamp atau sequential
+- **Reference**: orders.order_id
+- **Contoh**: R001, R002, R1732867200000
 
-***order_id***
-- **Tipe**: `VARCHAR(50)`
-- **Format**: `"ORD-KITCHEN-001"`, `"ORD-BAR-045"`
-- **Constraint**: NOT NULL
-- **Catatan**: Readable order identifier
+***menu_name*** (Denormalized)
+- **Tipe**: `VARCHAR(100)`
+- **Purpose**: Fast query tanpa JOIN
+- **Contoh**: "Nasi Goreng Special"
+
+***cook_name*** (Denormalized)
+- **Tipe**: `VARCHAR(100)`
+- **Purpose**: Fast query tanpa JOIN
+- **Contoh**: "Ahmad Hidayat"
 
 ***department***
-- **Tipe**: `VARCHAR(20)`
-- **Nilai**: `"kitchen"`, `"bar"`, `"snack"`
-- **Constraint**: CHECK constraint, NOT NULL
-- **Catatan**: Lowercase untuk consistency
+- **Tipe**: `ENUM('kitchen', 'bar', 'snack')`
+- **Lowercase**: Berbeda dengan menu_items.Kategori
 
-### Timing Columns:
-
-***start_time***
-- **Tipe**: `TIMESTAMP`
-- **Format**: `"YYYY-MM-DD HH:MM:SS"`
-- **Contoh**: `"2024-11-21 10:15:30"`
-- **Constraint**: NOT NULL
-- **Catatan**: Saat karyawan klik START
-
-***finish_time***
-- **Tipe**: `TIMESTAMP`
-- **Format**: `"YYYY-MM-DD HH:MM:SS"`
-- **Contoh**: `"2024-11-21 10:23:45"`
-- **Constraint**: NOT NULL, > start_time
-- **Catatan**: Saat karyawan klik DONE
-
-***duration_seconds*** (GENERATED COLUMN)
+***quantity***
 - **Tipe**: `INT`
-- **Formula**: `TIMESTAMPDIFF(SECOND, start_time, finish_time)`
-- **Contoh**: `495` (8 menit 15 detik)
-- **Catatan**: Auto-calculated, tidak bisa di-insert manual
-- **Storage**: STORED (tersimpan di disk, lebih cepat query)
+- **Default**: 1
+- **Range**: > 0
 
-### Performance Metrics:
+***started_time***
+- **Tipe**: `DATETIME`
+- **Format**: 'YYYY-MM-DD HH:MM:SS'
+- **Contoh**: '2025-11-29 10:30:00'
+- **Purpose**: Timestamp mulai memasak
 
-***efficiency_category***
-- **Tipe**: `VARCHAR(20)`
-- **Nilai**: 
-  - `"Sangat Cepat"` - Very Fast
-  - `"Cepat"` - Fast
-  - `"Normal"` - Normal
-  - `"Lambat"` - Slow
-  - `"Sangat Lambat"` - Very Slow
-- **Nullable**: YES
-- **Catatan**: Calculated by application logic
+***finished_time***
+- **Tipe**: `DATETIME`
+- **Format**: 'YYYY-MM-DD HH:MM:SS'
+- **Contoh**: '2025-11-29 10:35:30'
+- **Purpose**: Timestamp selesai memasak
 
-***efficiency_ratio***
-- **Tipe**: `DECIMAL(5,2)`
-- **Format**: `1.25` (artinya 125% dari waktu normal)
-- **Range**: `0.00` - `999.99`
-- **Nullable**: YES
-- **Formula**: `duration_seconds / expected_duration`
-
-***expected_duration***
+***elapsed_time***
 - **Tipe**: `INT`
 - **Unit**: Detik
-- **Sumber**: `Waktu_Normal` dari `menu_items`
-- **Nullable**: YES
-- **Catatan**: Snapshot nilai pada saat cooking, bukan reference
+- **Calculation**: `(finished_time - started_time)`
+- **Contoh**: 330 (5 menit 30 detik)
 
----
+***frozen_time***
+- **Tipe**: `DATETIME`
+- **Purpose**: Snapshot timestamp saat data disimpan ke log
+- **Usually**: Sama dengan atau setelah finished_time
 
-### Contoh Insert:
-
-```sql
--- Insert cooking log
-INSERT INTO cooking_logs (
-    ID_Menu, 
-    staff_id, 
-    order_id, 
-    department, 
-    start_time, 
-    finish_time, 
-    efficiency_category,
-    efficiency_ratio,
-    expected_duration
-)
-VALUES (
-    'MN001',                        -- Thai Tea
-    1,                              -- Juwita Mayasari
-    'ORD-BAR-123',
-    'bar',
-    '2024-11-21 10:15:30',
-    '2024-11-21 10:20:45',          -- 5 min 15 sec = 315 sec
-    'Cepat',                        -- Calculated
-    0.88,                           -- 315 / 360 = 0.875
-    360                             -- 6 minutes expected
-);
-```
+***efficiency_level***
+- **Tipe**: `ENUM('Very Fast', 'Fast', 'Normal', 'Slow', 'Very Slow')`
+- **Classification**:
+  ```
+  Very Fast: ≤ 120s (≤ 2 min)
+  Fast:      121-240s (2-4 min)
+  Normal:    241-360s (4-6 min)
+  Slow:      361-600s (6-10 min)
+  Very Slow: > 600s (> 10 min)
+  ```
 
 ---
 
 ## 👥 3. Tabel: staff
-
-***DATA KARYAWAN***
 
 ### Definisi Tabel:
 
 ```sql
 CREATE TABLE staff (
     -- Primary Key
-    staff_id INT AUTO_INCREMENT PRIMARY KEY,
+    staff_id VARCHAR(10) PRIMARY KEY,
     
-    -- Informasi Personal
-    nama_lengkap VARCHAR(100) NOT NULL,
-    department VARCHAR(20) NOT NULL,
-    role VARCHAR(20) DEFAULT 'cook',
+    -- Personal Info
+    staff_name VARCHAR(100) NOT NULL,
+    phone_number VARCHAR(20),
     
-    -- Autentikasi
-    pin_code VARCHAR(4) NOT NULL,
+    -- Role & Department
+    position VARCHAR(50) NOT NULL COMMENT 'Job title: Cook, Bartender, Waiter, etc.',
+    department ENUM('Kitchen', 'Bar', 'Snack', 'Checker') NOT NULL,
     
-    -- Kontak
-    phone VARCHAR(15),
-    email VARCHAR(100),
+    -- Schedule
+    shift ENUM('Pagi', 'Siang', 'Malam') NOT NULL,
     
-    -- Employment Info
-    hire_date DATE,
-    status VARCHAR(20) DEFAULT 'active',
+    -- Status
+    is_active BOOLEAN DEFAULT TRUE,
     
     -- Metadata
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     
-    -- Constraints
-    UNIQUE KEY unique_pin (department, pin_code),
-    CONSTRAINT chk_dept CHECK (department IN ('kitchen', 'bar', 'snack', 'checker', 'waiter')),
-    CONSTRAINT chk_status CHECK (status IN ('active', 'inactive', 'on_leave')),
-    CONSTRAINT chk_pin CHECK (pin_code REGEXP '^[0-9]{4}$'),
-    
     -- Indexes
     INDEX idx_department (department),
-    INDEX idx_status (status),
-    INDEX idx_nama (nama_lengkap)
+    INDEX idx_active (is_active),
+    INDEX idx_shift (shift)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 ```
 
 ### Detail Kolom:
 
 ***staff_id*** (PRIMARY KEY)
-- **Tipe**: `INT AUTO_INCREMENT`
-- **Range**: 1 - 2,147,483,647
-- **Catatan**: Auto-increment
+- **Tipe**: `VARCHAR(10)`
+- **Format**: Prefix + Sequential Number
+- **Prefix Mapping**:
+  ```
+  Kitchen → k{n}  (k1, k2, k3, ...)
+  Bar     → b{n}  (b1, b2, b3, ...)
+  Snack   → s{n}  (s1, s2, s3, ...)
+  Checker → w{n}  (w1, w2, w3, ...)
+  ```
+- **Contoh**: k1, k2, b1, b2, s1, w1, w2
+- **Auto-increment**: Per-department counter
 
-***nama_lengkap***
+***staff_name***
 - **Tipe**: `VARCHAR(100)`
-- **Contoh**: `"Juwita Mayasari"`, `"Budi Santoso"`
+- **Contoh**: "Ahmad Hidayat", "Siti Nurhaliza"
 - **Constraint**: NOT NULL
-- **Catatan**: Full name dengan proper capitalization
+
+***phone_number***
+- **Tipe**: `VARCHAR(20)`
+- **Format**: Flexible (08xxxx atau +62xxx)
+- **Contoh**: "081234567890"
+- **Nullable**: TRUE
+
+***position***
+- **Tipe**: `VARCHAR(50)`
+- **Contoh**: "Head Cook", "Bartender", "Waitress", "Cook"
+- **Constraint**: NOT NULL
 
 ***department***
-- **Tipe**: `VARCHAR(20)`
-- **Nilai**: `"kitchen"`, `"bar"`, `"snack"`, `"checker"`, `"waiter"`
-- **Constraint**: CHECK constraint, NOT NULL
+- **Tipe**: `ENUM('Kitchen', 'Bar', 'Snack', 'Checker')`
+- **Case**: Capitalized (berbeda dengan department di log_memasak)
+- **Mapping**:
+  ```
+  Kitchen → Cook/Head Cook
+  Bar     → Bartender/Barista
+  Snack   → Snack Cook
+  Checker → Waiter/Waitress
+  ```
 
-***role***
-- **Tipe**: `VARCHAR(20)`
-- **Nilai**: `"cook"`, `"waiter"`, `"checker"`, `"manager"`
-- **Default**: `"cook"`
-- **Catatan**: Berbeda dengan department (1 department bisa punya banyak role)
+***shift***
+- **Tipe**: `ENUM('Pagi', 'Siang', 'Malam')`
+- **Shifts**:
+  - Pagi: 06:00-14:00
+  - Siang: 14:00-22:00
+  - Malam: 22:00-06:00
 
-***pin_code***
-- **Tipe**: `VARCHAR(4)`
-- **Format**: 4 digit angka (`"1234"`, `"5678"`)
-- **Constraint**: 
-  - UNIQUE per department
-  - REGEX `^[0-9]{4}$`
-  - NOT NULL
-- **Catatan**: Untuk PIN entry authentication
-
-***phone***
-- **Tipe**: `VARCHAR(15)`
-- **Format**: `"+62812XXXXXXXX"` atau `"08XXXXXXXXXX"`
-- **Nullable**: YES
-
-***email***
-- **Tipe**: `VARCHAR(100)`
-- **Format**: Valid email address
-- **Nullable**: YES
-
-***hire_date***
-- **Tipe**: `DATE`
-- **Format**: `"YYYY-MM-DD"`
-- **Contoh**: `"2024-01-15"`
-- **Nullable**: YES
-
-***status***
-- **Tipe**: `VARCHAR(20)`
-- **Nilai**: `"active"`, `"inactive"`, `"on_leave"`
-- **Default**: `"active"`
-- **Catatan**: Untuk filter staff yang aktif
+***is_active***
+- **Tipe**: `BOOLEAN`
+- **Default**: TRUE
+- **Purpose**: Soft delete (tidak menghapus data staff)
+- **Effect**: Inactive staff tidak muncul di SelectCookPanel/SelectWaiterPanel
 
 ---
 
-### Contoh Data:
-
-```sql
-INSERT INTO staff (nama_lengkap, department, role, pin_code, phone, hire_date) VALUES
-('Juwita Mayasari', 'kitchen', 'cook', '1234', '+628123456789', '2023-01-15'),
-('Budi Santoso', 'kitchen', 'cook', '5678', '+628198765432', '2023-02-01'),
-('Siti Nurhaliza', 'bar', 'cook', '1234', '+628111111111', '2023-03-10'),
-('Ahmad Dahlan', 'snack', 'cook', '1234', '+628122222222', '2023-04-05'),
-('Rina Wijaya', 'checker', 'checker', '9999', '+628133333333', '2023-05-20');
-```
-
----
-
-## 🧾 4. Tabel: orders
-
-***HEADER PESANAN***
+## 📋 4. Tabel: orders
 
 ### Definisi Tabel:
 
 ```sql
 CREATE TABLE orders (
     -- Primary Key
-    order_id VARCHAR(50) PRIMARY KEY,
+    order_id VARCHAR(20) PRIMARY KEY,
     
     -- Order Info
-    table_number INT,
-    department VARCHAR(20) NOT NULL,
+    customer_name VARCHAR(100) NOT NULL,
+    order_time DATETIME NOT NULL,
     
-    -- Status Tracking
-    status VARCHAR(20) DEFAULT 'not_started',
+    -- Department
+    department ENUM('kitchen', 'bar', 'snack') NOT NULL,
     
-    -- Staff Assignment
-    assigned_waiter_id INT,
+    -- Status
+    status ENUM('pending', 'in-progress', 'completed', 'delivered') NOT NULL DEFAULT 'pending',
     
-    -- Timestamps
+    -- Completed Time
+    completed_time DATETIME NULL COMMENT 'Waktu semua items selesai dimasak',
+    
+    -- Metadata
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    started_at TIMESTAMP NULL,
-    completed_at TIMESTAMP NULL,
-    delivered_at TIMESTAMP NULL,
-    
-    -- Totals
-    total_items INT DEFAULT 0,
-    total_amount DECIMAL(10,2),
-    
-    -- Foreign Keys
-    FOREIGN KEY (assigned_waiter_id) REFERENCES staff(staff_id) ON DELETE SET NULL,
-    
-    -- Constraints
-    CONSTRAINT chk_dept CHECK (department IN ('kitchen', 'bar', 'snack')),
-    CONSTRAINT chk_status CHECK (status IN ('not_started', 'in_progress', 'finished', 'delivered')),
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     
     -- Indexes
-    INDEX idx_table (table_number),
+    INDEX idx_department (department),
     INDEX idx_status (status),
-    INDEX idx_dept (department),
-    INDEX idx_created (created_at)
+    INDEX idx_order_time (order_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 ```
 
 ### Detail Kolom:
 
 ***order_id*** (PRIMARY KEY)
-- **Tipe**: `VARCHAR(50)`
-- **Format**: `"ORD-{DEPT}-{NUMBER}"`
-- **Contoh**: `"ORD-KITCHEN-001"`, `"ORD-BAR-045"`
+- **Tipe**: `VARCHAR(20)`
+- **Format**: "R" + sequential atau timestamp
+- **Contoh**: R001, R002, R1732867200000
 - **Constraint**: UNIQUE, NOT NULL
 
-***table_number***
-- **Tipe**: `INT`
-- **Range**: 1 - 999
-- **Nullable**: YES (takeaway orders bisa NULL)
+***customer_name***
+- **Tipe**: `VARCHAR(100)`
+- **Contoh**: "Budi", "Meja 5", "Siti"
+- **Constraint**: NOT NULL
+
+***order_time***
+- **Tipe**: `DATETIME`
+- **Format**: 'YYYY-MM-DD HH:MM:SS'
+- **Purpose**: Timestamp saat order dibuat
 
 ***department***
-- **Tipe**: `VARCHAR(20)`
-- **Nilai**: `"kitchen"`, `"bar"`, `"snack"`
-- **Constraint**: CHECK constraint
+- **Tipe**: `ENUM('kitchen', 'bar', 'snack')`
+- **Lowercase**: Konsisten dengan log_memasak
 
 ***status***
-- **Tipe**: `VARCHAR(20)`
-- **Nilai**: 
-  - `"not_started"` - Belum mulai
-  - `"in_progress"` - Sedang dikerjakan
-  - `"finished"` - Selesai masak
-  - `"delivered"` - Sudah diantar
-- **Default**: `"not_started"`
+- **Tipe**: `ENUM('pending', 'in-progress', 'completed', 'delivered')`
+- **States**:
+  - `pending`: Semua items not-started
+  - `in-progress`: Ada item yang started/on-going
+  - `completed`: Semua items finished
+  - `delivered`: Semua items delivered by waiter
 
-***assigned_waiter_id*** (FOREIGN KEY)
-- **Tipe**: `INT`
-- **Referensi**: `staff.staff_id`
-- **Nullable**: YES (NULL = belum assign waiter)
-- **On Delete**: SET NULL
-
-### Timestamp Columns:
-
-***created_at***
-- **Tipe**: `TIMESTAMP`
-- **Default**: `CURRENT_TIMESTAMP`
-- **Catatan**: Saat order dibuat
-
-***started_at***
-- **Tipe**: `TIMESTAMP NULL`
-- **Catatan**: Saat first item mulai dimasak
-
-***completed_at***
-- **Tipe**: `TIMESTAMP NULL`
-- **Catatan**: Saat all items selesai
-
-***delivered_at***
-- **Tipe**: `TIMESTAMP NULL`
-- **Catatan**: Saat waiter deliver ke meja
+***completed_time***
+- **Tipe**: `DATETIME`
+- **Nullable**: TRUE
+- **Set**: Ketika status → 'completed'
 
 ---
 
-## 📦 5. Tabel: order_items
-
-***DETAIL ITEM DALAM PESANAN***
+## 🍽️ 5. Tabel: order_items
 
 ### Definisi Tabel:
 
@@ -593,39 +422,36 @@ CREATE TABLE order_items (
     item_id BIGINT AUTO_INCREMENT PRIMARY KEY,
     
     -- Foreign Keys
-    order_id VARCHAR(50) NOT NULL,
+    order_id VARCHAR(20) NOT NULL,
     ID_Menu VARCHAR(10) NOT NULL,
-    assigned_cook_id INT,
+    staff_id VARCHAR(10) NULL COMMENT 'Cook yang mengerjakan item ini',
     
     -- Item Info
-    quantity INT DEFAULT 1,
-    item_status VARCHAR(20) DEFAULT 'not_started',
+    menu_name VARCHAR(100) NOT NULL,
+    quantity INT NOT NULL DEFAULT 1 CHECK (quantity > 0),
     
-    -- Timing
-    started_time TIMESTAMP NULL,
-    finished_time TIMESTAMP NULL,
+    -- Status
+    status ENUM('not-started', 'on-going', 'finished') NOT NULL DEFAULT 'not-started',
     
-    -- Pricing
-    unit_price DECIMAL(10,2),
-    subtotal DECIMAL(10,2) GENERATED ALWAYS AS (quantity * unit_price) STORED,
+    -- Timing Data
+    started_time DATETIME NULL COMMENT 'Waktu cook mulai item',
+    finished_time DATETIME NULL COMMENT 'Waktu cook selesai item',
+    elapsed_time INT NULL COMMENT 'Durasi memasak (detik)',
     
     -- Metadata
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     
     -- Foreign Key Constraints
-    FOREIGN KEY (order_id) REFERENCES orders(order_id) ON DELETE CASCADE,
-    FOREIGN KEY (ID_Menu) REFERENCES menu_items(ID_Menu) ON DELETE RESTRICT,
-    FOREIGN KEY (assigned_cook_id) REFERENCES staff(staff_id) ON DELETE SET NULL,
-    
-    -- Constraints
-    CONSTRAINT chk_item_status CHECK (item_status IN ('not_started', 'in_progress', 'finished')),
-    CONSTRAINT chk_quantity CHECK (quantity > 0),
+    CONSTRAINT fk_item_order FOREIGN KEY (order_id) REFERENCES orders(order_id) ON DELETE CASCADE,
+    CONSTRAINT fk_item_menu FOREIGN KEY (ID_Menu) REFERENCES menu_items(ID_Menu) ON DELETE CASCADE,
+    CONSTRAINT fk_item_staff FOREIGN KEY (staff_id) REFERENCES staff(staff_id) ON DELETE SET NULL,
     
     -- Indexes
     INDEX idx_order (order_id),
     INDEX idx_menu (ID_Menu),
-    INDEX idx_cook (assigned_cook_id),
-    INDEX idx_status (item_status)
+    INDEX idx_cook (staff_id),
+    INDEX idx_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 ```
 
@@ -633,56 +459,140 @@ CREATE TABLE order_items (
 
 ***item_id*** (PRIMARY KEY)
 - **Tipe**: `BIGINT AUTO_INCREMENT`
-- **Catatan**: Unique ID untuk setiap item
+- **Auto-increment**: Database managed
 
 ***order_id*** (FOREIGN KEY)
-- **Tipe**: `VARCHAR(50)`
-- **Referensi**: `orders.order_id`
-- **On Delete**: CASCADE (hapus order = hapus items)
+- **Tipe**: `VARCHAR(20)`
+- **Reference**: orders.order_id
+- **Cascade**: DELETE CASCADE
 
 ***ID_Menu*** (FOREIGN KEY)
 - **Tipe**: `VARCHAR(10)`
-- **Referensi**: `menu_items.ID_Menu`
-- **On Delete**: RESTRICT (tidak bisa hapus menu yang sedang diorder)
+- **Reference**: menu_items.ID_Menu
+- **Cascade**: DELETE CASCADE
 
-***assigned_cook_id*** (FOREIGN KEY)
-- **Tipe**: `INT`
-- **Referensi**: `staff.staff_id`
-- **Nullable**: YES
-- **On Delete**: SET NULL
+***staff_id*** (FOREIGN KEY)
+- **Tipe**: `VARCHAR(10)`
+- **Reference**: staff.staff_id
+- **Nullable**: TRUE (item belum di-assign cook)
+- **Cascade**: DELETE SET NULL
+
+***menu_name*** (Denormalized)
+- **Tipe**: `VARCHAR(100)`
+- **Purpose**: Fast query tanpa JOIN
 
 ***quantity***
 - **Tipe**: `INT`
-- **Default**: `1`
-- **Constraint**: > 0
+- **Default**: 1
+- **Range**: > 0
 
-***item_status***
-- **Tipe**: `VARCHAR(20)`
-- **Nilai**: `"not_started"`, `"in_progress"`, `"finished"`
-- **Default**: `"not_started"`
+***status***
+- **Tipe**: `ENUM('not-started', 'on-going', 'finished')`
+- **Flow**: not-started → on-going → finished
 
 ***started_time***
-- **Tipe**: `TIMESTAMP NULL`
-- **Catatan**: Saat cook klik START
+- **Tipe**: `DATETIME`
+- **Nullable**: TRUE
+- **Set**: Ketika status → 'on-going'
 
 ***finished_time***
-- **Tipe**: `TIMESTAMP NULL`
-- **Catatan**: Saat cook klik DONE
+- **Tipe**: `DATETIME`
+- **Nullable**: TRUE
+- **Set**: Ketika status → 'finished'
 
-***unit_price***
-- **Tipe**: `DECIMAL(10,2)`
-- **Catatan**: Snapshot harga saat order (bisa beda dengan harga current)
-
-***subtotal*** (GENERATED COLUMN)
-- **Tipe**: `DECIMAL(10,2)`
-- **Formula**: `quantity * unit_price`
-- **Storage**: STORED
+***elapsed_time***
+- **Tipe**: `INT`
+- **Unit**: Detik
+- **Calculation**: `(finished_time - started_time)`
+- **Nullable**: TRUE
 
 ---
 
-## 📅 6. Tabel: schedules
+## 👨‍🍳 6. Tabel: waiter_assignments
 
-***JADWAL SHIFT KARYAWAN***
+### Definisi Tabel:
+
+```sql
+CREATE TABLE waiter_assignments (
+    -- Primary Key
+    assignment_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    
+    -- Foreign Keys
+    order_id VARCHAR(20) NOT NULL,
+    item_id BIGINT NOT NULL,
+    waiter_id VARCHAR(10) NOT NULL,
+    
+    -- Assignment Info
+    waiter_name VARCHAR(100) NOT NULL,
+    assigned_time DATETIME NOT NULL,
+    delivered_time DATETIME NULL,
+    
+    -- Status
+    is_delivered BOOLEAN DEFAULT FALSE,
+    
+    -- Metadata
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    
+    -- Foreign Key Constraints
+    CONSTRAINT fk_assignment_order FOREIGN KEY (order_id) REFERENCES orders(order_id) ON DELETE CASCADE,
+    CONSTRAINT fk_assignment_item FOREIGN KEY (item_id) REFERENCES order_items(item_id) ON DELETE CASCADE,
+    CONSTRAINT fk_assignment_waiter FOREIGN KEY (waiter_id) REFERENCES staff(staff_id) ON DELETE CASCADE,
+    
+    -- Unique Constraint: One waiter per item
+    UNIQUE KEY unique_item_assignment (item_id),
+    
+    -- Indexes
+    INDEX idx_order (order_id),
+    INDEX idx_waiter (waiter_id),
+    INDEX idx_delivered (is_delivered)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+```
+
+### Detail Kolom:
+
+***assignment_id*** (PRIMARY KEY)
+- **Tipe**: `BIGINT AUTO_INCREMENT`
+- **Auto-increment**: Database managed
+
+***order_id*** (FOREIGN KEY)
+- **Tipe**: `VARCHAR(20)`
+- **Reference**: orders.order_id
+- **Cascade**: DELETE CASCADE
+
+***item_id*** (FOREIGN KEY)
+- **Tipe**: `BIGINT`
+- **Reference**: order_items.item_id
+- **Cascade**: DELETE CASCADE
+- **Unique**: Satu item hanya bisa di-assign ke satu waiter
+
+***waiter_id*** (FOREIGN KEY)
+- **Tipe**: `VARCHAR(10)`
+- **Format**: w1, w2, w3, ...
+- **Reference**: staff.staff_id WHERE department='Checker'
+- **Cascade**: DELETE CASCADE
+
+***waiter_name*** (Denormalized)
+- **Tipe**: `VARCHAR(100)`
+- **Purpose**: Fast query tanpa JOIN
+
+***assigned_time***
+- **Tipe**: `DATETIME`
+- **Purpose**: Timestamp saat waiter di-assign ke item
+
+***delivered_time***
+- **Tipe**: `DATETIME`
+- **Nullable**: TRUE
+- **Set**: Ketika waiter marks item as delivered
+
+***is_delivered***
+- **Tipe**: `BOOLEAN`
+- **Default**: FALSE
+- **Purpose**: Quick status check
+
+---
+
+## 📅 7. Tabel: schedules
 
 ### Definisi Tabel:
 
@@ -692,690 +602,309 @@ CREATE TABLE schedules (
     schedule_id BIGINT AUTO_INCREMENT PRIMARY KEY,
     
     -- Foreign Key
-    staff_id INT NOT NULL,
+    staff_id VARCHAR(10) NOT NULL,
     
-    -- Date & Time
+    -- Schedule Info
     work_date DATE NOT NULL,
-    day_of_week VARCHAR(10) NOT NULL,
-    shift_start TIME NOT NULL,
-    shift_end TIME NOT NULL,
+    shift ENUM('Pagi', 'Siang', 'Malam') NOT NULL,
     
     -- Status
-    is_working BOOLEAN DEFAULT TRUE,
-    leave_reason VARCHAR(200),
+    is_present BOOLEAN DEFAULT TRUE,
+    notes TEXT NULL,
     
     -- Metadata
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     
-    -- Foreign Key
-    FOREIGN KEY (staff_id) REFERENCES staff(staff_id) ON DELETE CASCADE,
+    -- Foreign Key Constraint
+    CONSTRAINT fk_schedule_staff FOREIGN KEY (staff_id) REFERENCES staff(staff_id) ON DELETE CASCADE,
     
-    -- Constraints
-    CONSTRAINT chk_day CHECK (day_of_week IN ('monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday')),
-    CONSTRAINT chk_shift CHECK (shift_end > shift_start),
+    -- Unique: One shift per staff per date
+    UNIQUE KEY unique_staff_date (staff_id, work_date),
     
     -- Indexes
-    UNIQUE KEY unique_staff_date (staff_id, work_date),
     INDEX idx_date (work_date),
-    INDEX idx_staff (staff_id)
+    INDEX idx_staff (staff_id),
+    INDEX idx_shift (shift)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 ```
 
-### Detail Kolom:
+---
 
-***schedule_id*** (PRIMARY KEY)
-- **Tipe**: `BIGINT AUTO_INCREMENT`
+## 🔗 Relationships & Constraints
 
-***staff_id*** (FOREIGN KEY)
-- **Tipe**: `INT`
-- **Referensi**: `staff.staff_id`
-- **On Delete**: CASCADE
+### ER Diagram (Text)
 
-***work_date***
-- **Tipe**: `DATE`
-- **Format**: `"YYYY-MM-DD"`
-- **Constraint**: UNIQUE per staff
+```
+menu_items (1) ──< (N) order_items
+menu_items (1) ──< (N) log_memasak
 
-***day_of_week***
-- **Tipe**: `VARCHAR(10)`
-- **Nilai**: `"monday"`, `"tuesday"`, ..., `"sunday"`
-- **Catatan**: Lowercase untuk consistency
+staff (1) ──< (N) order_items (assignedCook)
+staff (1) ──< (N) log_memasak (cookName)
+staff (1) ──< (N) waiter_assignments (waiter)
+staff (1) ──< (N) schedules
 
-***shift_start***
-- **Tipe**: `TIME`
-- **Format**: `"HH:MM:SS"`
-- **Contoh**: `"08:00:00"`, `"14:00:00"`
+orders (1) ──< (N) order_items
+orders (1) ──< (N) log_memasak
+orders (1) ──< (N) waiter_assignments
 
-***shift_end***
-- **Tipe**: `TIME`
-- **Format**: `"HH:MM:SS"`
-- **Contoh**: `"16:00:00"`, `"22:00:00"`
-- **Constraint**: > shift_start
+order_items (1) ──< (1) waiter_assignments (unique constraint)
+```
 
-***is_working***
-- **Tipe**: `BOOLEAN`
-- **Default**: `TRUE`
-- **Catatan**: FALSE = cuti/off
+### Key Relationships:
 
-***leave_reason***
-- **Tipe**: `VARCHAR(200)`
-- **Nullable**: YES
-- **Contoh**: `"Sakit"`, `"Cuti Tahunan"`, `"Izin Keluarga"`
+1. **menu_items → order_items** (1:N)
+   - One menu can be ordered multiple times
+
+2. **menu_items → log_memasak** (1:N)
+   - One menu can have multiple cooking logs
+
+3. **staff → order_items** (1:N)
+   - One cook can cook multiple items
+
+4. **staff → log_memasak** (1:N)
+   - One cook has multiple cooking logs
+
+5. **staff → waiter_assignments** (1:N)
+   - One waiter can deliver multiple items
+
+6. **orders → order_items** (1:N)
+   - One order has multiple items
+
+7. **order_items → waiter_assignments** (1:1)
+   - One item assigned to one waiter (UNIQUE constraint)
 
 ---
 
-## 🔗 Relasi Antar Tabel
+## 🔍 Sample Queries
 
-### Entity Relationship Diagram (ERD):
+### 1. Get All Active Staff by Department
 
-```
-menu_items (1) ──────< (N) order_items
-    │                       │
-    │                       │
-    │                  (N) >──────< (1) orders
-    │                                   │
-    └──< (N) cooking_logs               │
-             │                          │
-             │                          │
-    staff (1)├──> (N) cooking_logs     │
-             │                          │
-             ├──> (N) order_items       │
-             │                          │
-             ├──> (N) orders (waiter)   │
-             │                          │
-             └──> (N) schedules
+```sql
+SELECT staff_id, staff_name, position, shift
+FROM staff
+WHERE department = 'Kitchen' AND is_active = TRUE
+ORDER BY staff_name;
 ```
 
-### Penjelasan Relasi:
-
-***menu_items → order_items*** (1:N)
-- Satu menu item bisa ada di banyak order items
-- Foreign Key: `order_items.ID_Menu`
-
-***orders → order_items*** (1:N)
-- Satu order bisa punya banyak items
-- Foreign Key: `order_items.order_id`
-- Cascade delete: Hapus order = hapus items
-
-***menu_items → cooking_logs*** (1:N)
-- Satu menu bisa punya banyak cooking logs
-- Foreign Key: `cooking_logs.ID_Menu`
-
-***staff → cooking_logs*** (1:N)
-- Satu staff bisa punya banyak cooking logs
-- Foreign Key: `cooking_logs.staff_id`
-
-***staff → order_items*** (1:N)
-- Satu cook bisa di-assign ke banyak items
-- Foreign Key: `order_items.assigned_cook_id`
-
-***staff → orders*** (1:N)
-- Satu waiter bisa di-assign ke banyak orders
-- Foreign Key: `orders.assigned_waiter_id`
-
-***staff → schedules*** (1:N)
-- Satu staff punya banyak schedule entries
-- Foreign Key: `schedules.staff_id`
-- Cascade delete: Hapus staff = hapus schedules
-
----
-
-## 📈 Query Analytics Penting
-
-### 1. Average Cooking Time per Cook:
+### 2. Get Cooking Logs with Filters
 
 ```sql
 SELECT 
-    s.nama_lengkap AS cook_name,
-    s.department,
-    COUNT(cl.log_id) AS total_orders_completed,
-    AVG(cl.duration_seconds) AS avg_duration_seconds,
-    ROUND(AVG(cl.duration_seconds) / 60, 2) AS avg_duration_minutes,
-    MIN(cl.duration_seconds) AS fastest_time,
-    MAX(cl.duration_seconds) AS slowest_time
-FROM staff s
-INNER JOIN cooking_logs cl ON s.staff_id = cl.staff_id
-WHERE s.department IN ('kitchen', 'bar', 'snack')
-AND cl.finish_time >= DATE_SUB(NOW(), INTERVAL 30 DAY)
-GROUP BY s.staff_id, s.nama_lengkap, s.department
-ORDER BY avg_duration_seconds ASC;
+    lm.log_id,
+    lm.menu_name,
+    lm.cook_name,
+    lm.department,
+    lm.elapsed_time,
+    lm.efficiency_level,
+    DATE(lm.finished_time) as cook_date
+FROM log_memasak lm
+WHERE 
+    lm.department = 'kitchen'
+    AND DATE(lm.finished_time) >= '2025-11-01'
+    AND DATE(lm.finished_time) <= '2025-11-30'
+    AND lm.efficiency_level IN ('Very Fast', 'Fast')
+ORDER BY lm.finished_time DESC;
 ```
 
-### 2. Efficiency Distribution:
+### 3. Get Order with Items and Status
 
 ```sql
 SELECT 
-    efficiency_category,
-    COUNT(*) AS count,
-    ROUND(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM cooking_logs), 2) AS percentage,
-    AVG(duration_seconds) AS avg_duration,
-    AVG(efficiency_ratio) AS avg_ratio
-FROM cooking_logs
-WHERE finish_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)
-GROUP BY efficiency_category
-ORDER BY 
-    CASE efficiency_category
-        WHEN 'Sangat Cepat' THEN 1
-        WHEN 'Cepat' THEN 2
-        WHEN 'Normal' THEN 3
-        WHEN 'Lambat' THEN 4
-        WHEN 'Sangat Lambat' THEN 5
-        ELSE 6
-    END;
+    o.order_id,
+    o.customer_name,
+    o.order_time,
+    oi.menu_name,
+    oi.quantity,
+    oi.status,
+    s.staff_name as cook_name,
+    wa.waiter_name,
+    wa.is_delivered
+FROM orders o
+LEFT JOIN order_items oi ON o.order_id = oi.order_id
+LEFT JOIN staff s ON oi.staff_id = s.staff_id
+LEFT JOIN waiter_assignments wa ON oi.item_id = wa.item_id
+WHERE o.order_id = 'R001';
 ```
 
-### 3. Menu Performance:
+### 4. Get Cook Performance Statistics
 
 ```sql
 SELECT 
-    m.Nama_Menu,
-    m.Kategori,
-    m.Waktu_Normal AS expected_seconds,
-    COUNT(cl.log_id) AS times_cooked,
-    AVG(cl.duration_seconds) AS avg_actual_seconds,
-    ROUND(AVG(cl.duration_seconds) / m.Waktu_Normal * 100, 2) AS performance_percentage,
-    MIN(cl.duration_seconds) AS best_time,
-    MAX(cl.duration_seconds) AS worst_time
-FROM menu_items m
-LEFT JOIN cooking_logs cl ON m.ID_Menu = cl.ID_Menu
-WHERE m.is_active = TRUE
-AND (cl.finish_time >= DATE_SUB(NOW(), INTERVAL 30 DAY) OR cl.finish_time IS NULL)
-GROUP BY m.ID_Menu, m.Nama_Menu, m.Kategori, m.Waktu_Normal
-HAVING times_cooked > 0
-ORDER BY times_cooked DESC;
-```
-
-### 4. Daily Department Summary:
-
-```sql
-SELECT 
-    DATE(finish_time) AS date,
+    cook_name,
     department,
-    COUNT(*) AS total_items_cooked,
-    COUNT(DISTINCT staff_id) AS cooks_working,
-    AVG(duration_seconds) AS avg_duration,
-    SUM(CASE WHEN efficiency_category IN ('Sangat Cepat', 'Cepat') THEN 1 ELSE 0 END) AS fast_items,
-    SUM(CASE WHEN efficiency_category = 'Normal' THEN 1 ELSE 0 END) AS normal_items,
-    SUM(CASE WHEN efficiency_category IN ('Lambat', 'Sangat Lambat') THEN 1 ELSE 0 END) AS slow_items
-FROM cooking_logs
-WHERE finish_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)
-GROUP BY DATE(finish_time), department
-ORDER BY date DESC, department;
+    COUNT(*) as total_items,
+    AVG(elapsed_time) as avg_time_seconds,
+    MIN(elapsed_time) as fastest_time,
+    MAX(elapsed_time) as slowest_time,
+    SUM(CASE WHEN efficiency_level = 'Very Fast' THEN 1 ELSE 0 END) as very_fast_count,
+    SUM(CASE WHEN efficiency_level = 'Fast' THEN 1 ELSE 0 END) as fast_count,
+    SUM(CASE WHEN efficiency_level = 'Normal' THEN 1 ELSE 0 END) as normal_count,
+    SUM(CASE WHEN efficiency_level = 'Slow' THEN 1 ELSE 0 END) as slow_count,
+    SUM(CASE WHEN efficiency_level = 'Very Slow' THEN 1 ELSE 0 END) as very_slow_count
+FROM log_memasak
+WHERE DATE(finished_time) >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+GROUP BY cook_name, department
+ORDER BY avg_time_seconds ASC;
 ```
 
-### 5. Cook Leaderboard:
+### 5. Get Menu Performance Statistics
 
 ```sql
 SELECT 
-    s.nama_lengkap,
-    s.department,
-    COUNT(cl.log_id) AS total_completed,
-    SUM(CASE WHEN cl.efficiency_category = 'Sangat Cepat' THEN 1 ELSE 0 END) AS very_fast_count,
-    SUM(CASE WHEN cl.efficiency_category = 'Cepat' THEN 1 ELSE 0 END) AS fast_count,
-    SUM(CASE WHEN cl.efficiency_category = 'Normal' THEN 1 ELSE 0 END) AS normal_count,
-    SUM(CASE WHEN cl.efficiency_category = 'Lambat' THEN 1 ELSE 0 END) AS slow_count,
-    SUM(CASE WHEN cl.efficiency_category = 'Sangat Lambat' THEN 1 ELSE 0 END) AS very_slow_count,
-    AVG(cl.efficiency_ratio) AS avg_efficiency_ratio,
-    -- Score calculation: very fast = 5 points, fast = 4, normal = 3, slow = 2, very slow = 1
-    SUM(
-        CASE cl.efficiency_category
-            WHEN 'Sangat Cepat' THEN 5
-            WHEN 'Cepat' THEN 4
-            WHEN 'Normal' THEN 3
-            WHEN 'Lambat' THEN 2
-            WHEN 'Sangat Lambat' THEN 1
-            ELSE 0
-        END
-    ) AS total_score
-FROM staff s
-INNER JOIN cooking_logs cl ON s.staff_id = cl.staff_id
-WHERE cl.finish_time >= DATE_SUB(NOW(), INTERVAL 30 DAY)
-GROUP BY s.staff_id, s.nama_lengkap, s.department
-HAVING total_completed >= 10
-ORDER BY total_score DESC, avg_efficiency_ratio ASC
-LIMIT 20;
-```
-
-### 6. Hourly Peak Analysis:
-
-```sql
-SELECT 
-    HOUR(finish_time) AS hour,
+    menu_name,
     department,
-    COUNT(*) AS items_completed,
-    AVG(duration_seconds) AS avg_duration,
-    COUNT(DISTINCT staff_id) AS cooks_active
-FROM cooking_logs
-WHERE finish_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)
-GROUP BY HOUR(finish_time), department
-ORDER BY hour, department;
+    COUNT(*) as order_count,
+    AVG(elapsed_time) as avg_cooking_time,
+    MIN(elapsed_time) as min_cooking_time,
+    MAX(elapsed_time) as max_cooking_time
+FROM log_memasak
+WHERE DATE(finished_time) >= '2025-11-01'
+GROUP BY menu_name, department
+ORDER BY order_count DESC
+LIMIT 10;
 ```
 
----
-
-## 🔄 Trigger & Stored Procedures
-
-### Trigger 1: Auto-create Cooking Log
-
-***Trigger untuk otomatis membuat cooking log saat order_item selesai***
+### 6. Get Waiter Delivery Statistics
 
 ```sql
-DELIMITER //
-
-CREATE TRIGGER after_order_item_finished
-AFTER UPDATE ON order_items
-FOR EACH ROW
-BEGIN
-    -- Check if status changed to 'finished' and has timing data
-    IF NEW.item_status = 'finished' 
-       AND OLD.item_status != 'finished'
-       AND NEW.started_time IS NOT NULL 
-       AND NEW.finished_time IS NOT NULL 
-       AND NEW.assigned_cook_id IS NOT NULL THEN
-        
-        -- Get expected duration from menu_items
-        SET @expected_dur = (
-            SELECT Waktu_Normal 
-            FROM menu_items 
-            WHERE ID_Menu = NEW.ID_Menu
-        );
-        
-        -- Calculate efficiency ratio
-        SET @actual_dur = TIMESTAMPDIFF(SECOND, NEW.started_time, NEW.finished_time);
-        SET @eff_ratio = @actual_dur / @expected_dur;
-        
-        -- Determine efficiency category
-        SET @eff_category = CASE
-            WHEN @eff_ratio <= 0.5 THEN 'Sangat Cepat'
-            WHEN @eff_ratio < 0.8 THEN 'Cepat'
-            WHEN @eff_ratio <= 1.2 THEN 'Normal'
-            WHEN @eff_ratio < 2.0 THEN 'Lambat'
-            ELSE 'Sangat Lambat'
-        END;
-        
-        -- Get department from order
-        SET @dept = (
-            SELECT department 
-            FROM orders 
-            WHERE order_id = NEW.order_id
-        );
-        
-        -- Insert cooking log
-        INSERT INTO cooking_logs (
-            ID_Menu,
-            staff_id,
-            order_item_id,
-            order_id,
-            department,
-            start_time,
-            finish_time,
-            efficiency_category,
-            efficiency_ratio,
-            expected_duration
-        ) VALUES (
-            NEW.ID_Menu,
-            NEW.assigned_cook_id,
-            NEW.item_id,
-            NEW.order_id,
-            @dept,
-            NEW.started_time,
-            NEW.finished_time,
-            @eff_category,
-            @eff_ratio,
-            @expected_dur
-        );
-    END IF;
-END//
-
-DELIMITER ;
-```
-
-### Trigger 2: Update Order Status
-
-```sql
-DELIMITER //
-
-CREATE TRIGGER after_order_items_change
-AFTER UPDATE ON order_items
-FOR EACH ROW
-BEGIN
-    DECLARE total_items INT;
-    DECLARE finished_items INT;
-    DECLARE started_items INT;
-    
-    -- Count items in this order
-    SELECT COUNT(*), 
-           SUM(CASE WHEN item_status = 'finished' THEN 1 ELSE 0 END),
-           SUM(CASE WHEN item_status IN ('in_progress', 'finished') THEN 1 ELSE 0 END)
-    INTO total_items, finished_items, started_items
-    FROM order_items
-    WHERE order_id = NEW.order_id;
-    
-    -- Update order status based on items
-    IF finished_items = total_items THEN
-        -- All items finished
-        UPDATE orders 
-        SET status = 'finished',
-            completed_at = NOW()
-        WHERE order_id = NEW.order_id 
-        AND status != 'finished';
-        
-    ELSEIF started_items > 0 THEN
-        -- At least one item started
-        UPDATE orders 
-        SET status = 'in_progress',
-            started_at = COALESCE(started_at, NOW())
-        WHERE order_id = NEW.order_id 
-        AND status = 'not_started';
-    END IF;
-END//
-
-DELIMITER ;
-```
-
-### Stored Procedure: Calculate Staff Performance
-
-```sql
-DELIMITER //
-
-CREATE PROCEDURE calculate_staff_performance(
-    IN p_staff_id INT,
-    IN p_days INT,
-    OUT p_avg_duration DECIMAL(10,2),
-    OUT p_total_orders INT,
-    OUT p_efficiency_score DECIMAL(5,2)
-)
-BEGIN
-    SELECT 
-        AVG(duration_seconds),
-        COUNT(*),
-        AVG(efficiency_ratio)
-    INTO 
-        p_avg_duration,
-        p_total_orders,
-        p_efficiency_score
-    FROM cooking_logs
-    WHERE staff_id = p_staff_id
-    AND finish_time >= DATE_SUB(NOW(), INTERVAL p_days DAY);
-END//
-
-DELIMITER ;
-```
-
-### Usage Example:
-
-```sql
--- Call stored procedure
-CALL calculate_staff_performance(1, 30, @avg, @total, @score);
-
--- Display results
 SELECT 
-    @avg AS average_duration_seconds,
-    @total AS total_orders_completed,
-    @score AS efficiency_score;
+    wa.waiter_name,
+    COUNT(*) as total_deliveries,
+    SUM(CASE WHEN wa.is_delivered THEN 1 ELSE 0 END) as completed_deliveries,
+    AVG(TIMESTAMPDIFF(SECOND, wa.assigned_time, wa.delivered_time)) as avg_delivery_time_seconds
+FROM waiter_assignments wa
+WHERE DATE(wa.assigned_time) >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+    AND wa.is_delivered = TRUE
+GROUP BY wa.waiter_name
+ORDER BY completed_deliveries DESC;
 ```
 
----
-
-## 📊 Views untuk Analytics
-
-### View 1: Staff Performance Summary
+### 7. Get Daily Order Summary
 
 ```sql
-CREATE OR REPLACE VIEW v_staff_performance AS
+SELECT 
+    DATE(o.order_time) as order_date,
+    o.department,
+    COUNT(DISTINCT o.order_id) as total_orders,
+    COUNT(oi.item_id) as total_items,
+    SUM(oi.quantity) as total_quantity,
+    AVG(oi.elapsed_time) as avg_cooking_time
+FROM orders o
+JOIN order_items oi ON o.order_id = oi.order_id
+WHERE DATE(o.order_time) >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+GROUP BY DATE(o.order_time), o.department
+ORDER BY order_date DESC, o.department;
+```
+
+### 8. Get Staff Schedule for Today
+
+```sql
 SELECT 
     s.staff_id,
-    s.nama_lengkap,
+    s.staff_name,
+    s.position,
     s.department,
-    COUNT(cl.log_id) AS total_orders,
-    AVG(cl.duration_seconds) AS avg_duration,
-    AVG(cl.efficiency_ratio) AS avg_efficiency_ratio,
-    SUM(CASE WHEN cl.efficiency_category IN ('Sangat Cepat', 'Cepat') THEN 1 ELSE 0 END) AS fast_orders,
-    SUM(CASE WHEN cl.efficiency_category IN ('Lambat', 'Sangat Lambat') THEN 1 ELSE 0 END) AS slow_orders,
-    MIN(cl.finish_time) AS first_order_date,
-    MAX(cl.finish_time) AS last_order_date
+    sc.shift,
+    sc.is_present,
+    sc.notes
 FROM staff s
-LEFT JOIN cooking_logs cl ON s.staff_id = cl.staff_id
-WHERE s.status = 'active'
-GROUP BY s.staff_id, s.nama_lengkap, s.department;
-```
-
-### View 2: Menu Popularity & Performance
-
-```sql
-CREATE OR REPLACE VIEW v_menu_analytics AS
-SELECT 
-    m.ID_Menu,
-    m.Nama_Menu,
-    m.Kategori,
-    m.Harga,
-    m.Waktu_Normal AS expected_duration,
-    COUNT(DISTINCT oi.order_id) AS times_ordered,
-    COALESCE(SUM(oi.quantity), 0) AS total_quantity_ordered,
-    COUNT(cl.log_id) AS times_cooked,
-    AVG(cl.duration_seconds) AS avg_cooking_time,
-    AVG(cl.efficiency_ratio) AS avg_efficiency_ratio,
-    MIN(cl.duration_seconds) AS best_time,
-    MAX(cl.duration_seconds) AS worst_time
-FROM menu_items m
-LEFT JOIN order_items oi ON m.ID_Menu = oi.ID_Menu
-LEFT JOIN cooking_logs cl ON m.ID_Menu = cl.ID_Menu
-WHERE m.is_active = TRUE
-GROUP BY m.ID_Menu, m.Nama_Menu, m.Kategori, m.Harga, m.Waktu_Normal;
-```
-
-### View 3: Daily Department Stats
-
-```sql
-CREATE OR REPLACE VIEW v_daily_department_stats AS
-SELECT 
-    DATE(cl.finish_time) AS date,
-    cl.department,
-    COUNT(*) AS items_completed,
-    COUNT(DISTINCT cl.staff_id) AS unique_cooks,
-    COUNT(DISTINCT cl.ID_Menu) AS unique_menus,
-    AVG(cl.duration_seconds) AS avg_duration,
-    MIN(cl.duration_seconds) AS min_duration,
-    MAX(cl.duration_seconds) AS max_duration,
-    SUM(CASE WHEN cl.efficiency_category = 'Sangat Cepat' THEN 1 ELSE 0 END) AS very_fast_count,
-    SUM(CASE WHEN cl.efficiency_category = 'Cepat' THEN 1 ELSE 0 END) AS fast_count,
-    SUM(CASE WHEN cl.efficiency_category = 'Normal' THEN 1 ELSE 0 END) AS normal_count,
-    SUM(CASE WHEN cl.efficiency_category = 'Lambat' THEN 1 ELSE 0 END) AS slow_count,
-    SUM(CASE WHEN cl.efficiency_category = 'Sangat Lambat' THEN 1 ELSE 0 END) AS very_slow_count
-FROM cooking_logs cl
-GROUP BY DATE(cl.finish_time), cl.department;
+JOIN schedules sc ON s.staff_id = sc.staff_id
+WHERE sc.work_date = CURDATE()
+    AND s.is_active = TRUE
+ORDER BY s.department, sc.shift, s.staff_name;
 ```
 
 ---
 
-## 🔒 Security & Permissions
+## 🚀 Migration dari localStorage ke Database
 
-### Recommended User Roles:
+### Phase 1: Data Export
 
-```sql
--- Role 1: Admin (full access)
-CREATE USER 'admin_user'@'localhost' IDENTIFIED BY 'secure_password';
-GRANT ALL PRIVILEGES ON kitchen_db.* TO 'admin_user'@'localhost';
+```javascript
+// Export dari localStorage
+const kitchenOrders = JSON.parse(localStorage.getItem('kitchenOrders') || '[]');
+const cookingLogs = JSON.parse(localStorage.getItem('cookingLogs') || '[]');
+const staffList = JSON.parse(localStorage.getItem('staffManagementList') || '[]');
 
--- Role 2: Application (read/write data, no DDL)
-CREATE USER 'app_user'@'localhost' IDENTIFIED BY 'app_password';
-GRANT SELECT, INSERT, UPDATE ON kitchen_db.* TO 'app_user'@'localhost';
-GRANT DELETE ON kitchen_db.cooking_logs TO 'app_user'@'localhost';
-GRANT DELETE ON kitchen_db.order_items TO 'app_user'@'localhost';
+// Format untuk SQL INSERT
+const sqlInserts = {
+  orders: kitchenOrders.map(order => ({
+    order_id: order.id,
+    customer_name: order.orderName,
+    order_time: order.orderTime,
+    department: 'kitchen',
+    status: 'completed'
+  })),
+  // ... similar for other tables
+};
+```
 
--- Role 3: Analytics (read-only)
-CREATE USER 'analytics_user'@'localhost' IDENTIFIED BY 'analytics_password';
-GRANT SELECT ON kitchen_db.* TO 'analytics_user'@'localhost';
-GRANT SELECT ON kitchen_db.v_staff_performance TO 'analytics_user'@'localhost';
-GRANT SELECT ON kitchen_db.v_menu_analytics TO 'analytics_user'@'localhost';
-GRANT SELECT ON kitchen_db.v_daily_department_stats TO 'analytics_user'@'localhost';
+### Phase 2: API Integration
 
--- Apply changes
-FLUSH PRIVILEGES;
+```typescript
+// Replace localStorage calls dengan API calls
+// Before:
+const orders = JSON.parse(localStorage.getItem('kitchenOrders') || '[]');
+
+// After:
+const orders = await fetch('/api/orders?department=kitchen').then(r => r.json());
 ```
 
 ---
 
-## 🚀 Migration Script
+## 📝 Notes & Best Practices
 
-### Script untuk membuat semua tabel:
+### 1. Data Denormalization
 
-```sql
--- Database Creation
-CREATE DATABASE IF NOT EXISTS kitchen_db
-CHARACTER SET utf8mb4
-COLLATE utf8mb4_unicode_ci;
+Beberapa field di-denormalize (menu_name, cook_name, waiter_name) untuk:
+- ✅ Performance (menghindari JOIN berulang)
+- ✅ Consistency (data tetap tersimpan walau source berubah)
+- ⚠️ Trade-off: Storage space vs Query speed
 
-USE kitchen_db;
+### 2. Soft Delete
 
--- Drop tables if exist (for clean migration)
-SET FOREIGN_KEY_CHECKS = 0;
-DROP TABLE IF EXISTS schedules;
-DROP TABLE IF EXISTS cooking_logs;
-DROP TABLE IF EXISTS order_items;
-DROP TABLE IF EXISTS orders;
-DROP TABLE IF EXISTS staff;
-DROP TABLE IF EXISTS menu_items;
-SET FOREIGN_KEY_CHECKS = 1;
+Staff menggunakan `is_active` flag bukan DELETE:
+- ✅ Preserve historical data
+- ✅ Analytics tetap valid
+- ✅ Bisa di-reactivate
 
--- Create tables (order matters for foreign keys)
--- 1. menu_items (no dependencies)
-CREATE TABLE menu_items ( /* ... full definition above ... */ );
+### 3. Cascade Delete
 
--- 2. staff (no dependencies)
-CREATE TABLE staff ( /* ... full definition above ... */ );
+Foreign keys menggunakan CASCADE untuk:
+- ✅ Auto-cleanup related data
+- ✅ Maintain referential integrity
+- ⚠️ Hati-hati dengan production data
 
--- 3. orders (depends on staff)
-CREATE TABLE orders ( /* ... full definition above ... */ );
+### 4. Index Strategy
 
--- 4. order_items (depends on orders, menu_items, staff)
-CREATE TABLE order_items ( /* ... full definition above ... */ );
-
--- 5. cooking_logs (depends on menu_items, staff)
-CREATE TABLE cooking_logs ( /* ... full definition above ... */ );
-
--- 6. schedules (depends on staff)
-CREATE TABLE schedules ( /* ... full definition above ... */ );
-
--- Create views
--- v_staff_performance
--- v_menu_analytics
--- v_daily_department_stats
-
--- Create triggers
--- after_order_item_finished
--- after_order_items_change
-
--- Create stored procedures
--- calculate_staff_performance
-
--- Insert sample data
--- (Use the example inserts from above)
-```
+Indexes dibuat berdasarkan:
+- 🔍 Frequent query filters (department, status, date)
+- 🔗 Foreign keys (untuk JOIN performance)
+- 📊 Analytics queries (efficiency_level, cook_name)
 
 ---
 
-## 📝 Catatan Penting
+## 🔄 Changelog
 
-### Performance Optimization:
+### Version 3.0 (29 Nov 2025)
+- ✨ Added staff table dengan auto-increment ID system
+- ✨ Added waiter_assignments table (per-item assignment)
+- ✨ Updated staff_id format (k1, b2, s3, w1)
+- ✨ Added completed_time to orders table
+- ✨ Enhanced indexes untuk analytics queries
 
-***1. Indexing Strategy***
-- Primary keys di-index otomatis
-- Foreign keys harus di-index
-- Kolom yang sering di-WHERE clause harus di-index
-- Composite indexes untuk multi-column queries
+### Version 2.0
+- ✨ Added log_memasak table
+- ✨ Added order_items table
+- ✨ Separated orders dan items
 
-***2. Partitioning (untuk data besar)***
-```sql
--- Partition cooking_logs by month
-ALTER TABLE cooking_logs
-PARTITION BY RANGE (YEAR(finish_time) * 100 + MONTH(finish_time)) (
-    PARTITION p202401 VALUES LESS THAN (202402),
-    PARTITION p202402 VALUES LESS THAN (202403),
-    -- ... add more partitions as needed
-    PARTITION p_future VALUES LESS THAN MAXVALUE
-);
-```
-
-***3. Archive Old Data***
-```sql
--- Archive logs older than 1 year
-CREATE TABLE cooking_logs_archive LIKE cooking_logs;
-
-INSERT INTO cooking_logs_archive
-SELECT * FROM cooking_logs
-WHERE finish_time < DATE_SUB(NOW(), INTERVAL 1 YEAR);
-
-DELETE FROM cooking_logs
-WHERE finish_time < DATE_SUB(NOW(), INTERVAL 1 YEAR);
-```
-
-### Data Integrity:
-
-***1. Regular Backups***
-```bash
-# Daily backup
-mysqldump -u admin_user -p kitchen_db > backup_$(date +%Y%m%d).sql
-
-# Backup specific tables
-mysqldump -u admin_user -p kitchen_db menu_items staff > backup_core_$(date +%Y%m%d).sql
-```
-
-***2. Data Validation***
-- Gunakan CHECK constraints
-- Gunakan triggers untuk validasi complex
-- Validasi juga di application layer
-
-***3. Monitoring***
-```sql
--- Check for orphaned records
-SELECT * FROM order_items oi
-LEFT JOIN orders o ON oi.order_id = o.order_id
-WHERE o.order_id IS NULL;
-
--- Check for negative durations
-SELECT * FROM cooking_logs
-WHERE duration_seconds < 0;
-
--- Check for missing efficiency categories
-SELECT * FROM cooking_logs
-WHERE efficiency_category IS NULL
-AND finish_time IS NOT NULL;
-```
+### Version 1.0
+- 🎉 Initial schema design
 
 ---
 
-## 🎓 Best Practices
+**Dokumentasi ini akan diupdate seiring perkembangan sistem.**
 
-### DO:
-- ✅ Gunakan transactions untuk operasi multi-table
-- ✅ Index foreign keys
-- ✅ Gunakan prepared statements (mencegah SQL injection)
-- ✅ Validate data di application layer
-- ✅ Log important changes
-- ✅ Regular backups
-- ✅ Monitor query performance
-
-### DON'T:
-- ❌ Store passwords in plain text
-- ❌ Delete data without backup
-- ❌ Ignore foreign key constraints
-- ❌ Use SELECT * in production
-- ❌ Hardcode database credentials
-- ❌ Ignore error logs
-- ❌ Skip index optimization
-
----
-
-## 📞 Support
-
-Untuk pertanyaan tentang struktur database:
-1. Review dokumentasi ini
-2. Check ERD dan relationships
-3. Test queries di development environment
-4. Consult dengan DBA team
-
----
-
-**Dokumentasi ini adalah spesifikasi lengkap untuk implementasi database backend sistem kitchen order management.** 🎉
+**Status:** ✅ Ready for Backend Implementation  
+**Next Step:** API Development + Migration Script

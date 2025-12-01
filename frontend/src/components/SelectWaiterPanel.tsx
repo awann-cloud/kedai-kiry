@@ -21,9 +21,11 @@
  * - Includes search bar for filtering waiters (placeholder for future implementation)
  */
 
+import React, { useState, useEffect } from 'react';
 import svgPaths from "../imports/StaffPanelPaths";
 import { imgGroup } from "../imports/StaffPanelImages";
-import { getStaffByDepartment } from '../data/staff';
+import { useStaff } from '../contexts/StaffContext';
+import { Worker } from '../data/staff';
 
 /**
  * Props for SelectWaiterPanel component
@@ -37,9 +39,33 @@ interface SelectWaiterPanelProps {
 }
 
 export default function SelectWaiterPanel({ isOpen, onClose, onSelectWaiter, orderName, orderId }: SelectWaiterPanelProps) {
-  // Get waitress staff members from the staff database
-  // Uses getStaffByDepartment('waitress') to return WAITSTAFF array
-  const waitstaff = getStaffByDepartment('waitress');
+  // Get waitstaff members from AdminStaffManagement localStorage (filtered by Checker department)
+  const [waitstaff, setWaitstaff] = useState<Worker[]>([]);
+  
+  useEffect(() => {
+    // Load staff from AdminStaffManagement localStorage
+    const savedStaffList = localStorage.getItem('staffManagementList');
+    if (savedStaffList) {
+      try {
+        const staffList = JSON.parse(savedStaffList);
+        
+        // Filter by Checker department and convert to Worker format
+        const filteredStaff = staffList
+          .filter((s: any) => s.department === 'Checker' && s.isActive)
+          .map((s: any) => ({
+            id: s.id,
+            name: s.name,
+            position: s.position || 'Waiter',
+            department: 'waitress',
+            available: s.isActive
+          }));
+        
+        setWaitstaff(filteredStaff);
+      } catch (e) {
+        console.error('Failed to parse staff list:', e);
+      }
+    }
+  }, [isOpen]); // Reload when panel opens
 
   return (
     <>

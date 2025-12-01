@@ -15,6 +15,20 @@ export interface MenuItem {
   startedTime?: number;                                  // Timestamp when item was started (milliseconds since epoch)
   finishedTime?: number;                                 // Timestamp when item was completed (milliseconds since epoch)
   elapsedTime: number;                                   // Running elapsed time in seconds (updates every second via OrderContext)
+  
+  // ⭐ NEW FEATURE - Per-Item Waiter Assignment (Post v732)
+  // Allows checker to assign waiters to individual items instead of entire receipts
+  // WORKFLOW: Checker clicks item name → SelectWaiterPanel → assigns waiter to specific item
+  waiter?: string;                                       // Name of waiter/waitress assigned to this specific item (Checker only)
+  itemDelivered?: boolean;                               // Whether this specific item has been delivered (Checker only)
+  
+  // ⭐ NEW FEATURE - Delivery Timing Tracking (Post v732)
+  // Tracks waiter delivery performance separately from cooking times
+  // AUTO-UPDATED: Timer runs every second in OrderContext, stops when itemDelivered = true
+  // UPDATED (29 Nov 2025): Auto-set when "All Delivered" button is pressed via markDelivered()
+  deliveryStartTime?: number;                            // Timestamp when waiter was assigned (milliseconds since epoch)
+  deliveryFinishedTime?: number;                         // Timestamp when item was delivered (milliseconds since epoch)
+  deliveryElapsedTime?: number;                          // Running delivery elapsed time in seconds (updates every second)
 }
 
 /**

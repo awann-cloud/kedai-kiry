@@ -1,755 +1,895 @@
-# Panduan Sistem Data - Cara Kerja Data yang Updateable
+# Panduan Sistem Data - Kitchen Order Management System
 
-## 📍 Di Mana Data yang Updateable?
+**Terakhir Diupdate:** 29 November 2025  
+**Versi:** 3.0 (Staff Management + localStorage Integration)
 
-**Data yang updateable ada di: `/contexts/OrderContext.tsx` dan `/contexts/StaffContext.tsx`**
+## 📋 Daftar Isi
 
-File-file ini berisi semua **live, real-time data** untuk sistem Kitchen Order Management dan Analytics.
-
----
-
-## 🔄 Cara Kerjanya
-
-### 1. Initial Data (Read-Only)
-
-File-file ini berisi **data awal** saat aplikasi load:
-
-***Order Data:***
-- `/data/makananOrders.ts` - Kitchen initial orders
-- `/data/barOrders.ts` - Bar initial orders  
-- `/data/snackOrders.ts` - Snack initial orders
-
-***Staff & Analytics Data:***
-- `/data/staff.ts` - Database karyawan (Kitchen, Bar, Snack staff + Waiters/Waitresses)
-- `/data/cookingLogs.ts` - Mock data cooking logs (35 records)
-- `/data/pinCodes.ts` - PIN codes untuk semua departments
-
-***Menu Configuration:***
-- `/data/menuItemEfficiency.ts` - Sistem efficiency classification & preset configuration
-- `/data/menuItemsConfig.ts` - Menu items configuration (DEPRECATED - sekarang dynamic)
-- `/data/menuItemsUtils.ts` - Utilities untuk menu management
-
-**File-file ini HANYA dibaca sekali saat startup.** Mereka tidak update selama runtime.
+1. [Overview Sistem Data](#overview-sistem-data)
+2. [Struktur Data Orders](#struktur-data-orders)
+3. [Struktur Data Staff](#struktur-data-staff)
+4. [localStorage Schema](#localstorage-schema)
+5. [Data Flow Architecture](#data-flow-architecture)
+6. [Timing Data System](#timing-data-system)
+7. [Waiter Assignment System](#waiter-assignment-system)
+8. [Staff Management System](#staff-management-system)
 
 ---
 
-### 2. Live Data (Updateable)
+## Overview Sistem Data
 
-***OrderContext (`/contexts/OrderContext.tsx`)***
+### Data Storage Strategy
 
-Tempat magic order management terjadi:
+Sistem menggunakan **localStorage** sebagai temporary storage untuk:
+1. ✅ Fast read/write operations
+2. ✅ Offline capability
+3. ✅ Zero latency data access
+4. ✅ Browser-based persistence
 
-```typescript
-const [kitchenOrders, setKitchenOrders] = useState<Order[]>(initialMakananOrdersData);
-const [barOrders, setBarOrders] = useState<Order[]>(initialBarOrdersData);
-const [snackOrders, setSnackOrders] = useState<Order[]>(initialSnackOrdersData);
-```
+### Future: Backend Integration
 
-**Ini adalah LIVE state** - semua perubahan terjadi di sini!
+localStorage akan digantikan dengan **Backend API** untuk:
+- 🔄 Multi-device sync
+- 💾 Permanent storage
+- 👥 Multi-user support
+- 📊 Advanced analytics
 
-***StaffContext (`/contexts/StaffContext.tsx`)***
-
-Tempat analytics dan staff management terjadi:
-
-```typescript
-// Cooking Logs - Real-time tracking
-const [cookingLogs, setCookingLogs] = useState<CookingLog[]>(initialCookingLogs);
-
-// Mock/Real data toggle
-const [useRealData, setUseRealData] = useState(false);
-
-// Staff management
-const [staffList, setStaffList] = useState<Staff[]>(initialStaff);
-```
-
-**Features:**
-- ✅ Automatic cooking log creation dari OrderContext
-- ✅ Real-time efficiency classification
-- ✅ Toggle antara mock/real data
-- ✅ CSV export functionality
-- ✅ Staff CRUD operations
-- ✅ Schedule management
+**Status saat ini:** Sistem siap untuk migrasi ke backend dengan struktur data yang sama.
 
 ---
 
-## 🎯 Cara Komponen Menggunakan Data
+## Struktur Data Orders
 
-### Kitchen, Bar, Snack Department Pages
-
-Setiap department page menggunakan hook `useOrders()`:
+### Order Interface
 
 ```typescript
-import { useOrders } from './contexts/OrderContext';
-
-export default function OrdersKitchen() {
-  const { getOrders, startItem, finishItem, completeOrder } = useOrders();
-  const orders = getOrders('kitchen'); // Get live kitchen orders
+interface Order {
+  // Identifikasi
+  id: string;                    // Unique order ID (R001, R002, dll)
+  orderName: string;             // Nama pemesan
+  orderTime: string;             // ISO timestamp order dibuat
   
-  // Saat klik START button:
-  startItem('kitchen', orderId, itemId, staffName);
-  // ✅ Data update di OrderContext
-  // ✅ SEMUA komponen yang pakai data ini re-render otomatis
-  // ✅ StaffContext detect dan create cooking log otomatis
+  // Menu items
+  items: MenuItem[];             // Array item yang dipesan
   
-  // Saat klik DONE button:
-  finishItem('kitchen', orderId, itemId);
-  // ✅ Data update di OrderContext
-  // ✅ Changes sync ke semua tempat instantly
-  // ✅ StaffContext finalize cooking log dengan efficiency calculation
+  // Waiter assignment (LEGACY - receipt level)
+  assignedWaiter?: string;       // Nama waiter (deprecated)
+  deliveredTime?: string;        // Timestamp delivered (deprecated)
 }
 ```
 
----
-
-### Admin Pages (Analytics & Management)
-
-***Admin Dashboard (`/admin`)***
+### MenuItem Interface
 
 ```typescript
-import { useStaff } from './contexts/StaffContext';
-
-export default function AdminHome() {
-  const { 
-    cookingLogs, 
-    useRealData, 
-    toggleDataSource,
-    exportLogsToCSV 
-  } = useStaff();
+interface MenuItem {
+  // Identifikasi
+  id: string;                    // Unique item ID dalam order (item-1, item-2)
+  name: string;                  // Nama menu
+  quantity: number;              // Jumlah porsi
+  notes: string;                 // Special instructions
   
-  // Toggle between mock and real data
-  toggleDataSource();
+  // Status workflow
+  status: 'not-started' | 'on-their-way' | 'finished';
   
-  // Export filtered data
-  exportLogsToCSV(filteredLogs);
+  // Cook/Staff assignment
+  staff?: string;                // Nama cook/staff yang mengerjakan item ini
   
-  // Analytics components akan auto-update
+  // Cooking timing data
+  startedTime?: number;          // Waktu mulai memasak (milliseconds since epoch)
+  finishedTime?: number;         // Waktu selesai memasak (milliseconds since epoch)
+  elapsedTime: number;           // Durasi memasak (detik, auto-update tiap detik)
+  
+  // Waiter assignment (PER-ITEM)
+  waiter?: string;               // Nama waiter yang deliver item ini
+  itemDelivered?: boolean;       // Apakah item sudah di-deliver
+  
+  // Delivery timing data
+  deliveryStartTime?: number;    // Waktu waiter ditugaskan (milliseconds since epoch)
+  deliveryFinishedTime?: number; // Waktu item di-deliver (milliseconds since epoch)
+  deliveryElapsedTime?: number;  // Durasi delivery (detik, auto-update tiap detik)
 }
 ```
 
-***Admin Menu Management (`/admin` - Menu Management)***
-
-```typescript
-import { 
-  getConfigForItem, 
-  updateConfigForItem,
-  calculateDefaultPresets 
-} from './data/menuItemEfficiency';
-
-// Get menu config dengan data-driven defaults
-const config = getConfigForItem(menuName, department);
-
-// Update preset times
-updateConfigForItem({
-  name: menuName,
-  department: department,
-  presets: updatedPresets
-});
-
-// Saved to localStorage - persists across sessions
-```
-
-***Admin Staff Management (`/admin` - Staff Management)***
-
-```typescript
-import { useStaff } from './contexts/StaffContext';
-
-export default function AdminStaffManagement() {
-  const { 
-    staffList, 
-    addStaff, 
-    updateStaff, 
-    deleteStaff,
-    updateSchedule 
-  } = useStaff();
-  
-  // CRUD operations
-  addStaff(newStaffData);
-  updateStaff(staffId, updatedData);
-  deleteStaff(staffId);
-  
-  // Schedule management
-  updateSchedule(staffId, weekSchedule);
-}
-```
-
----
-
-### Checker Section (Special - Melihat Semua Departments)
-
-Checker section punya multiple views:
-
-**CheckerHome** - Department selection screen dengan statistics
-- Menampilkan total receipts untuk setiap department (Kitchen, Bar, Snack)
-- Navigate ke specific department views atau "All Orders" view
-
-**Checker Department Pages** - Masing-masing bisa lihat dan update departments tertentu:
-- **CheckerOrdersMakanan** - Kitchen orders only
-- **CheckerOrdersBar** - Bar orders only
-- **CheckerOrdersSnacktsx** - Snack orders only
-- **CheckerOrdersAll** - Semua departments combined
-
-```typescript
-const { getAllOrders, getOrders } = useOrders();
-
-// Untuk specific department:
-const orders = getOrders('kitchen'); // Hanya kitchen
-
-// Untuk semua departments:
-const allDepartmentOrders = getAllOrders();
-// Returns: [
-//   { department: 'kitchen', orders: [...] },
-//   { department: 'bar', orders: [...] },
-//   { department: 'snack', orders: [...] }
-// ]
-```
-
----
-
-## 🔧 Available Update Functions
-
-### OrderContext Functions
-
-***`startItem(department, orderId, itemId, staffName)`***
-Mengubah item status dari "not-started" → "on-their-way"
-- Set staff member (cook/bartender/snack staff)
-- Mulai timer
-- Catat startedTime
-- **Sync di semua views** (department page + checker views)
-- **Trigger:** StaffContext mulai tracking item ini
-
-***`finishItem(department, orderId, itemId)`***
-Mengubah item status dari "on-their-way" → "finished"
-- Stop timer
-- Catat finishedTime
-- Calculate duration
-- **Sync di semua views**
-- **Trigger:** StaffContext create cooking log dengan efficiency classification
-
-***`completeOrder(department, orderId)`***
-Mark entire order sebagai complete (semua items finished)
-- Freeze order timer
-- Set completed flag
-- Tampilkan "Assign" button di Checker views
-- **Sync di semua views**
-
-***`assignWaiter(department, orderId, waiterName)`***
-Assign waiter/waitress ke completed order (Checker only)
-- Set assigned waiter
-- Ubah "Assign" button jadi "Delivered"
-- **Sync di semua Checker views**
-
-***`markDelivered(department, orderId)`***
-Mark order sebagai delivered ke customer (Checker only)
-- Set delivered flag
-- Final step di order lifecycle
-- **Sync di semua Checker views**
-
----
-
-### StaffContext Functions
-
-***`toggleDataSource()`***
-Toggle antara mock data dan real data
-- `false` = Show mock data (35 records dari cookingLogs.ts)
-- `true` = Show real data only (dari actual cooking)
-
-***`exportLogsToCSV(logs)`***
-Export cooking logs ke CSV file
-- Format: Cook Name, Menu Name, Time (MM:SS), Efficiency
-- Download otomatis dengan timestamp
-
-***`addStaff(staffData)`***
-Tambah staff baru
-```typescript
-addStaff({
-  id: 'generated-id',
-  name: 'Nama Lengkap',
-  role: 'kitchen', // 'kitchen' | 'bar' | 'snack' | 'waiter'
-  pin: '1234',
-  schedule: defaultSchedule
-});
-```
-
-***`updateStaff(staffId, staffData)`***
-Update existing staff data
-```typescript
-updateStaff('staff-1', {
-  name: 'Updated Name',
-  phone: '+628123456789',
-  schedule: updatedSchedule
-});
-```
-
-***`deleteStaff(staffId)`***
-Hapus staff (soft delete)
-```typescript
-deleteStaff('staff-1'); // Mark as inactive
-```
-
-***`updateSchedule(staffId, weekSchedule)`***
-Update weekly schedule untuk staff
-```typescript
-updateSchedule('staff-1', {
-  monday: { isWorking: true, shift: 'morning' },
-  tuesday: { isWorking: true, shift: 'afternoon' },
-  // ... rest of week
-});
-```
-
----
-
-## 📊 Real-Time Updates
-
-### OrderContext Timer
-
-Built-in timer yang running setiap detik:
-
-```typescript
-useEffect(() => {
-  const interval = setInterval(() => {
-    // Update elapsedTime untuk semua "on-their-way" items
-    // Ini bikin timers tick secara real-time
-  }, 1000);
-  
-  return () => clearInterval(interval);
-}, []);
-```
-
-### StaffContext Monitoring
-
-Automatic detection finished items:
-
-```typescript
-useEffect(() => {
-  // Monitor semua departments untuk finished items
-  const allDepartments = getAllOrders();
-  
-  allDepartments.forEach(dept => {
-    dept.orders.forEach(order => {
-      order.items.forEach(item => {
-        // Jika item baru finished dan belum tracked
-        if (item.status === 'finished' && 
-            item.startedTime && 
-            item.finishedTime && 
-            !trackedItems.has(item.id)) {
-          
-          // Create cooking log otomatis
-          createCookingLog(item, order);
-          
-          // Prevent duplicate
-          trackedItems.add(item.id);
-        }
-      });
-    });
-  });
-}, [getAllOrders]);
-```
-
----
-
-## 🔗 Data Flow Diagram
-
-### Order Management Flow
-
-```
-User klik START button (department atau checker page)
-       ↓
-OrdersKitchen.tsx / CheckerOrdersMakanan.tsx call startItem('kitchen', ...)
-       ↓
-OrderContext.tsx update kitchenOrders state
-       ↓
-React re-render SEMUA komponen yang pakai data ini:
-  • OrdersKitchen.tsx (Kitchen department page - update immediately)
-  • CheckerOrdersMakanan.tsx (Checker kitchen view - update immediately)
-  • CheckerOrdersAll.tsx (Checker all orders view - update immediately)
-  • CheckerHome.tsx (Statistics update immediately)
-       ↓
-StaffContext detect item started (via useEffect monitoring)
-       ↓
-Start tracking untuk cooking log creation
-```
-
-### Analytics Creation Flow
-
-```
-User klik DONE button (item selesai dimasak)
-       ↓
-OrderContext.tsx update item status → "finished"
-       ↓
-OrderContext.tsx record finishedTime
-       ↓
-StaffContext.tsx detect finished item (useEffect monitoring)
-       ↓
-Extract data: menuName, cookName, department, times
-       ↓
-Calculate duration_seconds = finishedTime - startedTime
-       ↓
-Get menu config untuk expected time
-       ↓
-Calculate efficiency_ratio = actual / expected
-       ↓
-Classify efficiency:
-  • ≤50% = Sangat Cepat
-  • 50-80% = Cepat
-  • 80-120% = Normal
-  • 120-200% = Lambat
-  • ≥200% = Sangat Lambat
-       ↓
-Create cooking log object
-       ↓
-Add to cookingLogs array
-       ↓
-Update real-time di Admin Dashboard
-       ↓
-[FUTURE] Send to backend database
-```
-
----
-
-## 🎮 Complete Order Workflow
-
-### Department Flow (Kitchen/Bar/Snack):
-
-```
-1. Item starts sebagai "not-started"
-   ↓
-2. Klik START → Select staff → Item jadi "on-their-way" (timer mulai)
-   ↓ (StaffContext mulai tracking)
-   ↓
-3. Klik DONE → Item jadi "finished" (timer freeze)
-   ↓ (StaffContext create cooking log otomatis)
-   ↓
-4. Semua items finished → Klik FINISHED → Order marked complete
-```
-
-### Checker Flow (Setelah Order Finished):
-
-```
-1. Order muncul sebagai "Finished" di Checker views
-   ↓
-2. "Assign" button muncul otomatis
-   ↓
-3. Klik Assign → Select waiter/waitress
-   ↓
-4. Button berubah jadi "Delivered"
-   ↓
-5. Klik Delivered → Order marked as delivered to customer
-```
-
-### Analytics Flow (Background - Automatic):
-
-```
-Saat item DONE di-klik:
-   ↓
-StaffContext detect finished item
-   ↓
-Calculate cooking time & efficiency
-   ↓
-Create cooking log automatically
-   ↓
-Update Admin Dashboard analytics real-time
-   ↓
-Data tersedia untuk:
-  • Filter by cook
-  • Filter by menu
-  • Filter by efficiency level
-  • Filter by date range
-  • Export to CSV
-```
-
----
-
-## 💡 Menambahkan Data Baru
-
-### Option 1: Tambah ke Initial Data (untuk orders baru)
-
-Edit `/data/makananOrders.ts`, `/data/barOrders.ts`, atau `/data/snackOrders.ts`:
-
-```typescript
-export const initialMakananOrdersData: Order[] = [
-  {
-    id: "order-4",
-    name: "Table 10",
-    orderId: "POS-091125-10",
-    priority: "NORMAL",
-    items: [
-      {
-        id: "item-13",
-        name: "Burger Special",
-        quantity: 2,
-        notes: "No onions",
-        status: "not-started",
-        elapsedTime: 0
-      }
-    ]
-  }
-];
-```
-
-Refresh app untuk lihat orders baru.
-
----
-
-### Option 2: Tambah ke Staff Database
-
-Edit `/data/staff.ts`:
-
-```typescript
-export const KITCHEN_STAFF: KitchenStaff[] = [
-  new KitchenStaff("k1", "Chef Mario", "Head Chef", true),
-  new KitchenStaff("k2", "Cook Luigi", "Line Cook", true),
-  // Tambah kitchen staff baru di sini
-];
-
-export const WAITSTAFF: Waitress[] = [
-  new Waitress("w1", "Sarah Johnson", "Senior Waitress", true),
-  new Waitress("w2", "Emily Chen", "Waitress", true),
-  // Tambah waitstaff baru di sini
-];
-```
-
----
-
-### Option 3: Customize Menu Presets
-
-Gunakan Menu Management page (`/admin` - Menu Management):
-
-```
-1. Select menu item dari sidebar
-2. Adjust preset times:
-   - Very Fast ⚡
-   - Fast 🚀
-   - Standard 👍
-   - Slow 🐢
-   - Extremely Slow 🐌
-3. Unit conversion otomatis (minutes ⟺ seconds)
-4. Validation: presets harus ascending order
-5. Save changes (disimpan ke localStorage)
-```
-
-Atau programmatically:
-
-```typescript
-import { updateConfigForItem } from './data/menuItemEfficiency';
-
-updateConfigForItem({
-  name: 'Nasi Goreng',
-  department: 'kitchen',
-  presets: [
-    { name: 'very-fast', label: '⚡ Very Fast', value: 3, unit: 'min' },
-    { name: 'fast', label: '🚀 Fast', value: 5, unit: 'min' },
-    { name: 'standard', label: '👍 Standard', value: 8, unit: 'min' },
-    { name: 'slow', label: '🐢 Slow', value: 12, unit: 'min' },
-    { name: 'extremely-slow', label: '🐌 Extremely Slow', value: 16, unit: 'min' }
+### Contoh Data Order
+
+```json
+{
+  "id": "R001",
+  "orderName": "Budi",
+  "orderTime": "2025-11-29T10:30:00.000Z",
+  "items": [
+    {
+      "id": "item-1",
+      "name": "Nasi Goreng Spesial",
+      "quantity": 2,
+      "status": "finished",
+      "assignedCook": "Ahmad",
+      "startedTime": "2025-11-29T10:31:00.000Z",
+      "finishedTime": 1732878960000,
+      "elapsedTime": 300,
+      "staff": "Chef John",
+      "waiter": "Siti",
+      "itemDelivered": true,
+      "deliveryStartTime": 1732878960000,
+      "deliveryFinishedTime": 1732879080000,
+      "deliveryElapsedTime": 120
+    },
+    {
+      "id": "item-2",
+      "name": "Es Teh Manis",
+      "quantity": 2,
+      "status": "finished",
+      "assignedCook": "Rina",
+      "startedTime": "2025-11-29T10:31:30.000Z",
+      "finishedTime": 1732878780000,
+      "elapsedTime": 90,
+      "staff": "Chef John",
+      "waiter": "Siti",
+      "itemDelivered": true,
+      "deliveryStartTime": 1732878780000,
+      "deliveryFinishedTime": 1732879080000,
+      "deliveryElapsedTime": 300
+    }
   ]
+}
+```
+
+---
+
+## Struktur Data Staff
+
+### StaffMember Interface (Admin Management)
+
+```typescript
+interface StaffMember {
+  // Identifikasi
+  id: string;              // Auto-generated ID (k1, b2, s3, w1)
+  name: string;            // Nama lengkap staff
+  
+  // Role & Department
+  position: string;        // Job title (Cook, Bartender, Waiter, dll)
+  department: string;      // "Kitchen" | "Bar" | "Snack" | "Checker"
+  
+  // Schedule
+  shift: string;           // "Pagi" | "Siang" | "Malam"
+  
+  // Contact
+  phoneNumber: string;     // Nomor telepon
+  
+  // Status
+  isActive: boolean;       // Active (true) atau Inactive (false)
+}
+```
+
+### Auto-Increment ID System
+
+Setiap departemen memiliki prefix unik dengan counter independen:
+
+| Department | Prefix | Format | Contoh |
+|-----------|--------|--------|--------|
+| Kitchen   | `k`    | k{n}   | k1, k2, k3, ... |
+| Bar       | `b`    | b{n}   | b1, b2, b3, ... |
+| Snack     | `s`    | s{n}   | s1, s2, s3, ... |
+| Checker   | `w`    | w{n}   | w1, w2, w3, ... |
+
+**Logic:**
+```typescript
+// Kitchen: k1, k2 sudah ada → Next: k3
+// Bar: b1, b2, b3 sudah ada → Next: b4
+// Snack: s1 sudah ada → Next: s2
+// Checker: w1, w2, w3, w4 sudah ada → Next: w5
+```
+
+### Contoh Data Staff
+
+```json
+[
+  {
+    "id": "k1",
+    "name": "Ahmad Hidayat",
+    "position": "Head Cook",
+    "department": "Kitchen",
+    "shift": "Pagi",
+    "phoneNumber": "081234567890",
+    "isActive": true
+  },
+  {
+    "id": "k2",
+    "name": "Rina Susanti",
+    "position": "Cook",
+    "department": "Kitchen",
+    "shift": "Siang",
+    "phoneNumber": "081234567891",
+    "isActive": true
+  },
+  {
+    "id": "b1",
+    "name": "Dedi Prasetyo",
+    "position": "Bartender",
+    "department": "Bar",
+    "shift": "Pagi",
+    "phoneNumber": "081234567892",
+    "isActive": true
+  },
+  {
+    "id": "w1",
+    "name": "Siti Nurhaliza",
+    "position": "Waitress",
+    "department": "Checker",
+    "shift": "Pagi",
+    "phoneNumber": "081234567893",
+    "isActive": true
+  },
+  {
+    "id": "k3",
+    "name": "Budi Santoso",
+    "position": "Cook",
+    "department": "Kitchen",
+    "shift": "Malam",
+    "phoneNumber": "081234567894",
+    "isActive": false
+  }
+]
+```
+
+### Worker Interface (Legacy Context Format)
+
+```typescript
+interface Worker {
+  id: string;              // Staff ID (k1, b2, etc.)
+  name: string;            // Nama staff
+  position: string;        // Posisi/jabatan
+  department: string;      // "kitchen" | "bar" | "snack" | "waitress"
+  available: boolean;      // Sama dengan isActive
+}
+```
+
+**Department Name Mapping:**
+
+Admin menggunakan format capitalized, Context menggunakan lowercase:
+
+```typescript
+const departmentMap = {
+  'Kitchen': 'kitchen',
+  'Bar': 'bar',
+  'Snack': 'snack',
+  'Checker': 'waitress'
+};
+```
+
+---
+
+## localStorage Schema
+
+### Storage Keys
+
+| Key | Type | Size | Description |
+|-----|------|------|-------------|
+| `kitchenOrders` | `Order[]` | ~5 KB | Kitchen department orders |
+| `barOrders` | `Order[]` | ~5 KB | Bar department orders |
+| `snackOrders` | `Order[]` | ~5 KB | Snack department orders |
+| `cookingLogs` | `CookingLog[]` | ~50 KB | Completed order analytics |
+| `staffManagementList` | `StaffMember[]` | ~10 KB | Staff database |
+
+**Total Storage:** ~75 KB (Browser limit: 5-10 MB)
+
+### CookingLog Interface
+
+```typescript
+interface CookingLog {
+  // Identifikasi
+  logId: string;           // Auto-generated log ID
+  
+  // Menu & Cook info
+  menuItem: string;        // Nama menu
+  cookName: string;        // Nama cook
+  department: string;      // Department asal
+  
+  // Timing data
+  startedTime: Date;       // Waktu mulai
+  finishedTime: Date;      // Waktu selesai
+  elapsedTime: number;     // Durasi (detik)
+  frozenTime: Date;        // Timestamp save ke log
+  
+  // Additional info
+  orderId: string;         // Reference ke order ID
+  quantity: number;        // Jumlah porsi
+}
+```
+
+### Data Persistence Flow
+
+```
+1. User Action
+   ↓
+2. Context State Update (React State)
+   ↓
+3. localStorage Write
+   JSON.stringify(data)
+   localStorage.setItem(key, jsonString)
+   ↓
+4. Component Re-render
+   ↓
+5. UI Update
+```
+
+**Consistency:** Semua komponen menggunakan Context yang sama → Auto-sync tanpa manual refresh.
+
+---
+
+## Data Flow Architecture
+
+### Order Lifecycle
+
+```
+1. NEW ORDER
+   └─→ Department Orders Array (kitchenOrders/barOrders/snackOrders)
+       status: ALL items "not-started"
+
+2. START ITEM (Department Page)
+   └─→ startItem(department, orderId, itemId, cookName)
+       ├─ item.status: "not-started" → "on-going"
+       ├─ item.assignedCook: cookName
+       ├─ item.startedTime: Date.now()
+       └─ Save to localStorage
+
+3. FINISH ITEM (Department Page)
+   └─→ finishItem(department, orderId, itemId)
+       ├─ item.status: "on-going" → "finished"
+       ├─ item.finishedTime: Date.now()
+       ├─ item.elapsedTime: (finishedTime - startedTime) / 1000
+       └─ Save to localStorage
+
+4. COMPLETE ORDER (Department Page)
+   └─→ completeOrder(department, orderId)
+       ├─ Check: ALL items finished?
+       ├─ Create CookingLog entries
+       ├─ Save to cookingLogs
+       └─ Order ready for waiter assignment
+
+5. ASSIGN WAITER (Checker Page)
+   └─→ assignWaiterToItem(department, orderId, itemId, waiterName)
+       ├─ item.waiter: waiterName
+       ├─ item.deliveryStartTime: Date.now()
+       └─ Save to localStorage
+
+6. MARK DELIVERED (Checker Page)
+   └─→ markItemDelivered(department, orderId, itemId)
+       ├─ item.deliveredTime: Date.now()
+       └─ Save to localStorage
+
+7. ALL ITEMS DELIVERED
+   └─→ Order complete cycle finished
+       └─ Data available for analytics
+```
+
+### Context Provider Hierarchy
+
+```
+<OrderProvider>                 ← Outer layer (Order data)
+  <StaffProvider>               ← Middle layer (Staff & Analytics)
+    <WaiterProvider>            ← Inner layer (Waiter assignment)
+      <App />
+    </WaiterProvider>
+  </StaffProvider>
+</OrderProvider>
+```
+
+**Dependency Flow:**
+- WaiterProvider → depends on OrderProvider
+- StaffProvider → depends on OrderProvider (for cookingLogs)
+- OrderProvider → independent (root data source)
+
+### Data Access Pattern
+
+```typescript
+// Component level
+function DepartmentPage() {
+  // Access order data
+  const { kitchenOrders, startItem, finishItem } = useOrders();
+  
+  // Access staff data
+  const { getStaffByDepartment } = useStaff();
+  
+  // Access waiter functions
+  const { assignWaiterToItem } = useWaiter();
+  
+  // ... component logic
+}
+```
+
+---
+
+## Timing Data System
+
+### Timestamp Tracking
+
+Sistem melacak 4 jenis timestamp untuk setiap menu item:
+
+| Timestamp | Type | When Recorded | Purpose |
+|-----------|------|---------------|---------|
+| `startedTime` | Date | Cook clicks "Start" | Menandai awal memasak |
+| `finishedTime` | Date | Cook clicks "Finish" | Menandai selesai memasak |
+| `frozenTime` | Date | Order completed | Snapshot untuk log_memasak |
+| `deliveredTime` | Date | Waiter delivers item | Track delivery time |
+
+### Elapsed Time Calculation
+
+```typescript
+// Calculate elapsed time in seconds
+const calculateElapsedTime = (startedTime: Date, finishedTime: Date): number => {
+  const diff = finishedTime.getTime() - startedTime.getTime();
+  return Math.floor(diff / 1000); // Convert ms to seconds
+};
+
+// Example:
+// startedTime: 10:30:00
+// finishedTime: 10:35:30
+// elapsedTime: 330 seconds (5 minutes 30 seconds)
+```
+
+### Efficiency Classification
+
+Berdasarkan `elapsedTime`, sistem mengklasifikasikan efisiensi:
+
+```typescript
+function classifyEfficiency(seconds: number): string {
+  if (seconds <= 120) return 'Very Fast';    // ≤ 2 menit - Hijau
+  if (seconds <= 240) return 'Fast';         // ≤ 4 menit - Hijau Muda
+  if (seconds <= 360) return 'Normal';       // ≤ 6 menit - Biru
+  if (seconds <= 600) return 'Slow';         // ≤ 10 menit - Oranye
+  return 'Very Slow';                        // > 10 menit - Merah
+}
+```
+
+### Timing Data Flow
+
+```
+Department Page
+  ↓
+Cook clicks "Start Item"
+  ↓
+startedTime: Date.now()
+  ↓
+[Cook is working...]
+  ↓
+Cook clicks "Finish Item"
+  ↓
+finishedTime: Date.now()
+elapsedTime: (finishedTime - startedTime) / 1000
+  ↓
+All items finished
+  ↓
+completeOrder()
+  ↓
+frozenTime: Date.now()
+  ↓
+Save to cookingLogs
+  ↓
+Checker Page
+  ↓
+Assign Waiter → deliveredTime: Date.now()
+  ↓
+Analytics Dashboard
+```
+
+---
+
+## Waiter Assignment System
+
+### Per-Item Assignment Architecture
+
+**Sistem Lama (DEPRECATED):**
+```typescript
+// Assign waiter ke seluruh receipt
+order.assignedWaiter = "Siti";
+order.deliveredTime = Date.now();
+```
+
+**Sistem Baru (CURRENT):**
+```typescript
+// Assign waiter ke masing-masing item
+item.waiter = "Siti";
+item.deliveryStartTime = Date.now();
+// Ketika di-deliver:
+item.itemDelivered = true;
+item.deliveryFinishedTime = Date.now();
+```
+
+### Assignment Logic
+
+```typescript
+// Assign waiter to specific item
+assignWaiterToItem(department, orderId, itemId, waiterName) {
+  // 1. Find order by ID
+  const order = orders.find(o => o.id === orderId);
+  
+  // 2. Find item by ID
+  const item = order.items.find(i => i.id === itemId);
+  
+  // 3. Assign waiter
+  item.waiter = waiterName;
+  item.deliveryStartTime = Date.now();
+  
+  // 4. Save to localStorage
+  localStorage.setItem(`${department}Orders`, JSON.stringify(orders));
+}
+
+// Mark item as delivered
+markItemDelivered(department, orderId, itemId) {
+  // 1. Find item
+  const item = findItem(department, orderId, itemId);
+  
+  // 2. Set delivered time
+  item.deliveredTime = new Date();
+  
+  // 3. Save to localStorage
+  saveOrders(department, orders);
+}
+```
+
+### Button State Logic (Checker Pages)
+
+```typescript
+// Per-item button states
+for each item in order.items:
+  if (!item.waiter) {
+    // Show "Assign" button (green)
+    button: "Assign Waiter"
+    color: green
+    action: Open SelectWaiterPanel
+  }
+  else if (!item.deliveredTime) {
+    // Show "Delivered" button (blue)
+    button: "Mark Delivered"
+    color: blue
+    action: markItemDelivered()
+  }
+  else {
+    // Show "Delivered" status (gray)
+    display: "✓ Delivered"
+    color: gray
+    disabled: true
+  }
+```
+
+### "Assign All" Button Logic
+
+```typescript
+// Check if "Assign All" button should show
+const hasUnassignedItems = order.items.some(item => !item.waiter);
+const allItemsFinished = order.items.every(item => item.status === 'finished');
+
+if (hasUnassignedItems && allItemsFinished) {
+  // Show "Assign All" button
+  <button onClick={() => assignAllItems(waiterName)}>
+    Assign All Items to {waiterName}
+  </button>
+}
+```
+
+**Auto-hide Logic:**
+- ✅ Button muncul: Ada item yang belum di-assign waiter
+- ❌ Button hilang: Semua item sudah di-assign waiter
+
+---
+
+## Staff Management System
+
+### Admin Management → SelectPanel Flow
+
+```
+1. AdminStaffManagement.tsx
+   ├─ Create staff: generateNextStaffId()
+   ├─ Save to localStorage: "staffManagementList"
+   └─ Format: { id: "k1", name: "Ahmad", department: "Kitchen", isActive: true }
+
+2. SelectCookPanel.tsx (Kitchen/Bar/Snack)
+   ├─ Load from localStorage: "staffManagementList"
+   ├─ Filter: department === "Kitchen/Bar/Snack" && isActive === true
+   ├─ Convert: "Kitchen" → "kitchen"
+   └─ Display in panel
+
+3. SelectWaiterPanel.tsx (Checker)
+   ├─ Load from localStorage: "staffManagementList"
+   ├─ Filter: department === "Checker" && isActive === true
+   ├─ Convert: "Checker" → "waitress"
+   └─ Display in panel
+```
+
+### Staff Filtering Logic
+
+```typescript
+// SelectCookPanel
+const loadKitchenStaff = () => {
+  const allStaff = JSON.parse(localStorage.getItem('staffManagementList') || '[]');
+  
+  const kitchenStaff = allStaff
+    .filter(s => s.department === 'Kitchen' && s.isActive)
+    .map(s => ({
+      id: s.id,              // k1, k2, k3
+      name: s.name,
+      position: s.position,
+      department: 'kitchen', // Lowercase conversion
+      available: true
+    }));
+  
+  return kitchenStaff;
+};
+
+// SelectWaiterPanel
+const loadWaitstaff = () => {
+  const allStaff = JSON.parse(localStorage.getItem('staffManagementList') || '[]');
+  
+  const waitstaff = allStaff
+    .filter(s => s.department === 'Checker' && s.isActive)
+    .map(s => ({
+      id: s.id,                // w1, w2, w3
+      name: s.name,
+      position: s.position,
+      department: 'waitress',  // Lowercase conversion
+      available: true
+    }));
+  
+  return waitstaff;
+};
+```
+
+### Active/Inactive Staff
+
+**Effect pada UI:**
+
+| isActive | AdminStaffManagement | SelectCookPanel | SelectWaiterPanel |
+|----------|---------------------|-----------------|-------------------|
+| `true`   | ✅ Displayed (Active badge) | ✅ Displayed | ✅ Displayed |
+| `false`  | ⚠️ Displayed (Inactive badge) | ❌ Hidden | ❌ Hidden |
+
+**Use Case:**
+- Staff cuti → Set `isActive: false`
+- Staff tidak muncul di assignment panel
+- Data staff tetap tersimpan (tidak dihapus)
+- Bisa di-activate kembali kapan saja
+
+---
+
+## Database Migration Path
+
+### Current: localStorage
+
+```typescript
+// Read
+const orders = JSON.parse(localStorage.getItem('kitchenOrders') || '[]');
+
+// Write
+localStorage.setItem('kitchenOrders', JSON.stringify(orders));
+```
+
+### Future: Backend API
+
+```typescript
+// Read
+const orders = await fetch('/api/orders?department=kitchen').then(r => r.json());
+
+// Write
+await fetch('/api/orders', {
+  method: 'POST',
+  body: JSON.stringify(order)
 });
 ```
 
+### Migration Strategy
+
+1. **Phase 1:** Implement API endpoints dengan struktur data yang sama
+2. **Phase 2:** Create Context adapter layer
+3. **Phase 3:** Switch storage backend (localStorage → API)
+4. **Phase 4:** Add real-time sync (WebSocket)
+5. **Phase 5:** Remove localStorage dependencies
+
+**Struktur data TIDAK perlu berubah** → Seamless migration.
+
 ---
 
-### Option 4: Tambah Functions ke Context (untuk runtime features)
+## Data Validation
 
-Jika perlu tambah functionality baru saat app running, tambah function ke Context:
-
-***Contoh: Add New Order (OrderContext)***
+### Order Validation
 
 ```typescript
-// Di OrderContext.tsx
-const addNewOrder = (department: Department, newOrder: Order) => {
-  switch (department) {
-    case 'kitchen':
-      setKitchenOrders(prev => [...prev, newOrder]);
-      break;
-    case 'bar':
-      setBarOrders(prev => [...prev, newOrder]);
-      break;
-    case 'snack':
-      setSnackOrders(prev => [...prev, newOrder]);
-      break;
+const validateOrder = (order: Order): boolean => {
+  // Check required fields
+  if (!order.id || !order.orderName || !order.orderTime) return false;
+  
+  // Check items array
+  if (!Array.isArray(order.items) || order.items.length === 0) return false;
+  
+  // Validate each item
+  for (const item of order.items) {
+    if (!item.id || !item.name || !item.quantity) return false;
+    if (!['not-started', 'on-going', 'finished'].includes(item.status)) return false;
   }
-};
-
-// Tambah ke context value:
-const value: OrderContextType = {
-  getOrders,
-  getAllOrders,
-  startItem,
-  finishItem,
-  completeOrder,
-  assignWaiter,
-  markDelivered,
-  addNewOrder // Function baru!
+  
+  return true;
 };
 ```
 
-***Contoh: Filter Analytics (StaffContext)***
+### Staff Validation
 
 ```typescript
-// Di StaffContext.tsx
-const filterLogsByDate = (
-  logs: CookingLog[], 
-  startDate: Date, 
-  endDate: Date
-): CookingLog[] => {
-  return logs.filter(log => {
-    const logDate = new Date(log.timestamp);
-    return logDate >= startDate && logDate <= endDate;
-  });
-};
-
-// Add to context value
-const value: StaffContextType = {
-  // ... existing values
-  filterLogsByDate // Function baru!
+const validateStaff = (staff: StaffMember): boolean => {
+  // Check required fields
+  if (!staff.id || !staff.name || !staff.department) return false;
+  
+  // Check department
+  if (!['Kitchen', 'Bar', 'Snack', 'Checker'].includes(staff.department)) return false;
+  
+  // Check ID format
+  const prefixMap = { 'Kitchen': 'k', 'Bar': 'b', 'Snack': 's', 'Checker': 'w' };
+  const expectedPrefix = prefixMap[staff.department];
+  if (!staff.id.startsWith(expectedPrefix)) return false;
+  
+  return true;
 };
 ```
 
 ---
 
-## 🗄️ Database Integration (Future)
+## Best Practices
 
-Saat connect ke backend database, data flow akan jadi:
+### 1. Data Immutability
 
-```
-Frontend (React State)
-       ↓
-OrderContext.tsx / StaffContext.tsx
-       ↓
-API Call (POST /api/cooking-logs)
-       ↓
-Backend Server
-       ↓
-MySQL Database
-       ↓
-INSERT INTO cooking_logs (...)
+```typescript
+// ✅ CORRECT: Create new array
+const updatedOrders = orders.map(order =>
+  order.id === orderId
+    ? { ...order, items: updatedItems }
+    : order
+);
+
+// ❌ WRONG: Mutate existing array
+orders[0].items[0].status = 'finished';
 ```
 
-**Tables yang perlu dibuat:** (Lihat FORMAT_DATABASE_SQL.md)
-- `menu_items` - Menu data dengan timing presets
-- `cooking_logs` - Histori memasak
-- `staff` - Data karyawan
-- `orders` - Header pesanan
-- `order_items` - Detail items dalam order
-- `schedules` - Jadwal shift karyawan
+### 2. Safe localStorage Access
+
+```typescript
+// ✅ CORRECT: Handle errors
+try {
+  const data = JSON.parse(localStorage.getItem('key') || '[]');
+  return data;
+} catch (error) {
+  console.error('Failed to parse localStorage data:', error);
+  return [];
+}
+
+// ❌ WRONG: No error handling
+const data = JSON.parse(localStorage.getItem('key'));
+```
+
+### 3. Type Safety
+
+```typescript
+// ✅ CORRECT: Use TypeScript interfaces
+const order: Order = {
+  id: 'R001',
+  orderName: 'Budi',
+  orderTime: new Date().toISOString(),
+  items: []
+};
+
+// ❌ WRONG: Untyped data
+const order = {
+  id: 'R001',
+  name: 'Budi', // Should be "orderName"
+  // Missing orderTime
+};
+```
+
+### 4. Data Cleanup
+
+```typescript
+// Periodically clean up old data
+const cleanupOldOrders = () => {
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - 30); // Keep last 30 days
+  
+  const recentOrders = orders.filter(order =>
+    new Date(order.orderTime) > cutoffDate
+  );
+  
+  localStorage.setItem('orders', JSON.stringify(recentOrders));
+};
+```
 
 ---
 
-## 🎓 Summary
+## Troubleshooting
 
-### Data Locations:
+### Issue: Data tidak sync
 
-***Initial Data (Startup - Read-Only):***
-- `/data/*.ts` - Initial data templates
-- `/data/cookingLogs.ts` - Mock analytics data
+**Diagnosis:**
+```typescript
+// Check localStorage
+console.log('kitchenOrders:', localStorage.getItem('kitchenOrders'));
 
-***Live Runtime Data (Updateable):***
-- `/contexts/OrderContext.tsx` - Order management
-- `/contexts/StaffContext.tsx` - Analytics & staff management
-- `localStorage` - Menu presets customization
-
-***Persistence:***
-- localStorage - Menu configs, user preferences
-- [FUTURE] MySQL Database - All data untuk production
-
----
-
-### Update Flow:
-
-***Department Pages (Kitchen/Bar/Snack):***
-- ✅ START items
-- ✅ DONE items
-- ✅ FINISHED orders
-- ✅ Automatic cooking log creation
-
-***Checker Pages:***
-- ✅ Semua yang departments bisa
-- ✅ ASSIGN waiters
-- ✅ Mark DELIVERED
-
-***Admin Pages:***
-- ✅ View cooking analytics
-- ✅ Filter & export data
-- ✅ Manage staff (CRUD)
-- ✅ Edit schedules
-- ✅ Customize menu presets
-- ✅ View raw database
-
----
-
-## ✨ Key Benefits
-
-### Single Source of Truth
-- OrderContext - Order management
-- StaffContext - Analytics & staff
-- Semua data dari satu tempat
-
-### Automatic Syncing
-- Update sekali, reflect everywhere instantly
-- No manual refresh needed
-- Real-time updates
-
-### Type Safety
-- Full TypeScript support
-- Compile-time error checking
-- IntelliSense autocomplete
-
-### Easy to Extend
-- Tambah functions ke Context
-- Update types di TypeScript
-- Clean architecture
-
-### Dual Workflow
-- Departments prepare food
-- Checkers handle delivery
-- Analytics track performance
-
-### Data-Driven Defaults
-- Menu presets dari actual cooking data
-- No hardcoded values
-- Customizable per menu item
-
----
-
-## 🔍 Troubleshooting
-
-### Issue: Data tidak update
+// Check Context state
+const { kitchenOrders } = useOrders();
+console.log('Context orders:', kitchenOrders);
+```
 
 **Solusi:**
-1. Check console untuk errors
-2. Verify Context providers di App.tsx
-3. Check useOrders() atau useStaff() hook dipanggil correctly
-4. Verify state update functions dipanggil dengan benar
+1. Verify localStorage key correct
+2. Check Context Provider hierarchy
+3. Ensure useEffect dependencies correct
 
-### Issue: Cooking logs tidak terbuat
+### Issue: Staff tidak muncul
+
+**Diagnosis:**
+```typescript
+// Check staff data
+const staff = JSON.parse(localStorage.getItem('staffManagementList') || '[]');
+console.log('All staff:', staff);
+
+// Check filtered staff
+const activeKitchenStaff = staff.filter(s => 
+  s.department === 'Kitchen' && s.isActive
+);
+console.log('Active kitchen staff:', activeKitchenStaff);
+```
 
 **Solusi:**
-1. Pastikan item punya startedTime DAN finishedTime
-2. Pastikan item.staff ter-assign
-3. Check StaffContext useEffect monitoring
-4. Check trackedItems Set untuk duplicate prevention
-
-### Issue: Menu presets tidak save
-
-**Solusi:**
-1. Check localStorage enabled di browser
-2. Verify validation tidak prevent save
-3. Check preset order (must be ascending)
-4. Clear localStorage dan test lagi
+1. Verify staff.isActive = true
+2. Check department name correct (case-sensitive)
+3. Remove invalid staff entries
 
 ---
 
-## 📞 Need Help?
+## Performance Monitoring
 
-**Perlu ubah data?** → Edit `/contexts/OrderContext.tsx` atau `/contexts/StaffContext.tsx`  
-**Perlu tambah initial orders?** → Edit `/data/makananOrders.ts` (atau barOrders.ts, snackOrders.ts)  
-**Perlu tambah staff?** → Gunakan Admin Staff Management page atau edit `/data/staff.ts`  
-**Perlu customize menu timing?** → Gunakan Admin Menu Management page  
-**Perlu understand routes?** → Lihat QUICK_REFERENCE.md  
-**Perlu database structure?** → Lihat FORMAT_DATABASE_SQL.md  
-**Perlu analytics info?** → Lihat PANDUAN_INTEGRASI_ANALYTICS_INDONESIA.md
+### localStorage Size Check
+
+```typescript
+// Calculate total storage size
+const calculateStorageSize = () => {
+  let total = 0;
+  
+  for (let key in localStorage) {
+    if (localStorage.hasOwnProperty(key)) {
+      total += localStorage[key].length + key.length;
+    }
+  }
+  
+  return (total / 1024).toFixed(2) + ' KB';
+};
+
+console.log('Total localStorage size:', calculateStorageSize());
+```
+
+### Data Statistics
+
+```typescript
+// Count total orders
+const totalOrders = 
+  kitchenOrders.length + 
+  barOrders.length + 
+  snackOrders.length;
+
+// Count total items
+const totalItems = 
+  kitchenOrders.reduce((sum, order) => sum + order.items.length, 0) +
+  barOrders.reduce((sum, order) => sum + order.items.length, 0) +
+  snackOrders.reduce((sum, order) => sum + order.items.length, 0);
+
+// Count total logs
+const totalLogs = cookingLogs.length;
+
+// Count total staff
+const totalStaff = staffList.length;
+const activeStaff = staffList.filter(s => s.isActive).length;
+```
 
 ---
 
-**Last Updated:** Current Session - Bahasa Indonesia Complete  
-**Version:** 2.0 dengan Analytics Integration  
-**Status:** ✅ Production Ready dengan Future Database Support
+**Panduan ini mencakup semua aspek sistem data dan akan diupdate seiring perkembangan sistem.**
+
+**Versi:** 3.0 - Staff Management + localStorage Integration  
+**Status:** ✅ Production Ready (Frontend)  
+**Next Step:** Backend API Integration

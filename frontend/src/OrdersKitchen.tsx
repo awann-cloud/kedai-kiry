@@ -249,8 +249,8 @@ export default function KitchenOrders() {
                     </svg>
                   </div>
                   <p className="absolute left-[21px] top-[43px] text-[#541168] text-[15px] underline not-italic">{counts.total} ITEMS</p>
-                  <p className="absolute left-[21px] top-[67px] text-[#6f839a] text-[7px] not-italic">{counts.finished} ITEMS FINISHED</p>
-                  <p className="absolute left-[89px] top-[67px] text-[#6f839a] text-[7px] not-italic">{counts.toGo} ITEMS TO GO</p>
+                  <p className="absolute left-[21px] top-[67px] text-[#6f839a] text-[8px] not-italic">{counts.finished} ITEMS FINISHED</p>
+                  <p className="absolute left-[97px] top-[67px] text-[#6f839a] text-[8px] not-italic">{counts.toGo} ITEMS TO GO</p>
                 </div>
 
                 {/* Receipt Info - In front */}
@@ -281,7 +281,7 @@ export default function KitchenOrders() {
                       <div className="absolute bg-gray-50 inset-0 rounded-[25px] shadow-[0px_4px_4px_0px_rgba(0,0,0,0.25)]" />
                       <div className="relative px-[27px] pt-[20px] pb-4">
                         <div className="flex gap-2 items-start">
-                          <p className="font-['Poppins:Bold',sans-serif] leading-[normal] not-italic text-[16px] text-black w-[110px] break-words">{item.name}</p>
+                          <p className="font-['Poppins:Bold',sans-serif] leading-[normal] not-italic text-[17px] text-black w-[110px] break-words">{item.name}</p>
                           <p className="font-['Poppins:Regular',sans-serif] leading-[normal] not-italic text-[16px] text-black w-[44px] flex-shrink-0">{item.quantity}X</p>
                         </div>
                         <p className="font-['Poppins:Regular',sans-serif] leading-[normal] not-italic text-[13px] text-black mt-2 w-[166px] break-words">{item.notes}</p>

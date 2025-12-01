@@ -1,6 +1,6 @@
 import svgPaths from "./svg-nijxhpontq";
 import imgImage1 from "figma:asset/212b4e4699c6d2dd5d40172db45ae1dc976caef1.png";
-import { imgGroup, imgGroup1, imgGroup2, imgGroup3, imgGroup4, imgGroup5 } from "./svg-codxk";
+import { imgGroup, imgGroup1, imgGroup2, imgGroup3, imgGroup4, imgGroup5 } from "./AdminHomePageMasks";
 
 function Group() {
   return (

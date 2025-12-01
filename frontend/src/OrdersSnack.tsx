@@ -168,8 +168,8 @@ export default function SnackOrders() {
                     <SnackIconSmall />
                   </div>
                   <p className="absolute left-[21px] top-[43px] text-[#541168] text-[15px] underline not-italic">{counts.total} ITEMS</p>
-                  <p className="absolute left-[21px] top-[67px] text-[#6f839a] text-[7px] not-italic">{counts.finished} ITEMS FINISHED</p>
-                  <p className="absolute left-[89px] top-[67px] text-[#6f839a] text-[7px] not-italic">{counts.toGo} ITEMS TO GO</p>
+                  <p className="absolute left-[21px] top-[67px] text-[#6f839a] text-[8px] not-italic">{counts.finished} ITEMS FINISHED</p>
+                  <p className="absolute left-[97px] top-[67px] text-[#6f839a] text-[8px] not-italic">{counts.toGo} ITEMS TO GO</p>
                 </div>
 
                 {/* Receipt Info - In front */}

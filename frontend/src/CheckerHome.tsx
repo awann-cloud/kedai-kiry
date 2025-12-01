@@ -23,7 +23,7 @@ import { useState, useEffect } from 'react';
 import CheckerDepartmentIconPaths from "./imports/CheckerDepartmentIcon";
 import { imgGroup, imgGroup1, imgGroup2 } from "./imports/BackgroundPlaceholders";
 import SparkleDecorationPaths from "./imports/SparkleDecoration";
-import { imgGroup as sparkleImgGroup } from "./imports/SparkleIcon";
+import { imgGroup as sparkleImgGroup } from "./imports/SparkleIconMask";
 import { useNavigate } from 'react-router-dom';
 import { useOrders } from './contexts/OrderContext';
 import SnackIconSmall from './imports/SnackIconSmall';
